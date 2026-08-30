@@ -10,9 +10,11 @@ import com.gecko.core.network.sse.streamSse
 import com.gecko.core.provider.internal.ProviderHttpException
 import com.gecko.core.provider.internal.ProviderJson
 import com.gecko.core.provider.internal.bodyOrThrow
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -66,7 +68,7 @@ internal class OpenAiChatEngine(
 
             emit(ChatEvent.Completed(finishReason ?: FinishReason.STOP, usage))
         } else {
-            val response = httpClient.newCall(request).execute()
+            val response = withContext(Dispatchers.IO) { httpClient.newCall(request).execute() }
             val bodyText = try {
                 response.bodyOrThrow()
             } catch (e: ProviderHttpException) {

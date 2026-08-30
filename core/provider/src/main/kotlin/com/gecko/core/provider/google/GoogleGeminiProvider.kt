@@ -83,7 +83,7 @@ class GoogleGeminiProvider(
 
             emit(ChatEvent.Completed(finishReason ?: FinishReason.STOP, usage))
         } else {
-            val response = httpClient.newCall(request).execute()
+            val response = withContext(Dispatchers.IO) { httpClient.newCall(request).execute() }
             val bodyText = try {
                 response.bodyOrThrow()
             } catch (e: ProviderHttpException) {

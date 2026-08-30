@@ -94,7 +94,7 @@ class AnthropicProvider(
                 emit(ChatEvent.Completed(finishReason ?: FinishReason.STOP, TokenUsage(inputTokens, outputTokens, inputTokens + outputTokens)))
             }
         } else {
-            val response = httpClient.newCall(request).execute()
+            val response = withContext(Dispatchers.IO) { httpClient.newCall(request).execute() }
             val bodyText = try {
                 response.bodyOrThrow()
             } catch (e: ProviderHttpException) {
