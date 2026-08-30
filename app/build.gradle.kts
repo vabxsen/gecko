@@ -16,6 +16,19 @@ val keystoreProperties = Properties().apply {
     }
 }
 
+// Android rejects an update whose versionCode isn't strictly higher than what's installed,
+// so it's derived from versionName instead of hand-incremented — every "major.minor[.patch]"
+// bump automatically produces a higher versionCode, which is what lets the in-app updater's
+// installed APK cleanly replace the previous one instead of risking a rejected/downgrade install.
+val appVersionName = "1.0"
+fun versionCodeFor(versionName: String): Int {
+    val parts = versionName.split(".").map { it.toIntOrNull() ?: 0 }
+    val major = parts.getOrElse(0) { 0 }
+    val minor = parts.getOrElse(1) { 0 }
+    val patch = parts.getOrElse(2) { 0 }
+    return major * 10_000 + minor * 100 + patch
+}
+
 android {
     namespace = "com.gecko.app"
     compileSdk = 36
@@ -24,8 +37,8 @@ android {
         applicationId = "com.gecko.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = versionCodeFor(appVersionName)
+        versionName = appVersionName
 
         vectorDrawables {
             useSupportLibrary = true

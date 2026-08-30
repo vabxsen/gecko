@@ -15,13 +15,24 @@ import androidx.compose.material.icons.outlined.Widgets
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.gecko.feature.settings.component.SettingsContentPadding
 import com.gecko.feature.settings.component.SettingsRow
 import com.gecko.feature.settings.component.SettingsSectionHeader
 import com.gecko.feature.settings.component.SettingsTopBar
+import com.gecko.feature.settings.update.UpdateCheckFab
+import com.gecko.feature.settings.update.UpdateCheckState
+import com.gecko.feature.settings.update.UpdateResultDialog
+import com.gecko.feature.settings.update.UpdateViewModel
 
 private data class SettingsDestination(
     val title: String,
@@ -40,10 +51,32 @@ fun SettingsListScreen(
     onNavigateDataPrivacy: () -> Unit,
     onNavigateAbout: () -> Unit,
     modifier: Modifier = Modifier,
+    updateViewModel: UpdateViewModel = hiltViewModel(),
 ) {
+    val updateState by updateViewModel.state.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(updateState) {
+        when (val state = updateState) {
+            is UpdateCheckState.UpToDate -> {
+                snackbarHostState.showSnackbar("You're on the latest version")
+                updateViewModel.dismiss()
+            }
+            is UpdateCheckState.Error -> {
+                snackbarHostState.showSnackbar(state.message)
+                updateViewModel.dismiss()
+            }
+            else -> Unit
+        }
+    }
+
     Scaffold(
         modifier = modifier,
         topBar = { SettingsTopBar(title = "Settings", onBack = onBack) },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        floatingActionButton = {
+            UpdateCheckFab(state = updateState, onClick = updateViewModel::checkForUpdate)
+        },
     ) { innerPadding ->
         val general = listOf(
             SettingsDestination("Appearance", "Theme and color", Icons.Outlined.Palette, onNavigateAppearance),
@@ -67,6 +100,15 @@ fun SettingsListScreen(
             items(other) { DestinationRow(it) }
         }
     }
+
+    UpdateResultDialog(
+        state = updateState,
+        onDownload = {
+            (updateState as? UpdateCheckState.Available)?.let { updateViewModel.downloadAndInstall(it.update) }
+        },
+        onOpenInstallSettings = updateViewModel::openInstallPermissionSettings,
+        onDismiss = updateViewModel::dismiss,
+    )
 }
 
 @Composable
