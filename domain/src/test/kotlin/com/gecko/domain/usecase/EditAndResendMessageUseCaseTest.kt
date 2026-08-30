@@ -32,7 +32,7 @@ class EditAndResendMessageUseCaseTest {
         )
         val useCase = EditAndResendMessageUseCase(conversationRepo, SendChatMessageUseCase(conversationRepo, chatRepo))
 
-        useCase(conversation.id, "u1", "First edited", ProviderId.OPENAI, "gpt-4o", streaming = true).collect { }
+        useCase(conversation.id, "u1", "First edited", "config-1", ProviderId.OPENAI, "gpt-4o", streaming = true).collect { }
 
         val messages = conversationRepo.observeMessages(conversation.id).first()
         assertFalse(messages.any { it.id == "a1" })

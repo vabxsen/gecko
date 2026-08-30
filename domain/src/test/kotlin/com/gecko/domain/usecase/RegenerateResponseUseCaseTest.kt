@@ -39,7 +39,7 @@ class RegenerateResponseUseCaseTest {
         )
         val useCase = RegenerateResponseUseCase(conversationRepo, SendChatMessageUseCase(conversationRepo, chatRepo))
 
-        useCase(conversation.id, ProviderId.OPENAI, "gpt-4o", streaming = true).collect { }
+        useCase(conversation.id, "config-1", ProviderId.OPENAI, "gpt-4o", streaming = true).collect { }
 
         val messages = conversationRepo.observeMessages(conversation.id).first()
         assertFalse(messages.any { it.id == "a1" })

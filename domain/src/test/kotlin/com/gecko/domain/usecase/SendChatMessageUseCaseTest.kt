@@ -39,7 +39,7 @@ class SendChatMessageUseCaseTest {
         )
         val useCase = SendChatMessageUseCase(conversationRepo, chatRepo)
 
-        useCase(conversation.id, ProviderId.OPENAI, "gpt-4o", emptyList(), streaming = true).collect { }
+        useCase(conversation.id, "config-1", ProviderId.OPENAI, "gpt-4o", emptyList(), streaming = true).collect { }
 
         val assistant = conversationRepo.observeMessages(conversation.id).first().single { it.role == MessageRole.ASSISTANT }
         assertEquals(MessageStatus.COMPLETE, assistant.status)
@@ -62,7 +62,7 @@ class SendChatMessageUseCaseTest {
         )
         val useCase = SendChatMessageUseCase(conversationRepo, chatRepo)
 
-        useCase(conversation.id, ProviderId.OPENAI, "gpt-4o", emptyList(), streaming = true).collect { }
+        useCase(conversation.id, "config-1", ProviderId.OPENAI, "gpt-4o", emptyList(), streaming = true).collect { }
 
         val assistant = conversationRepo.observeMessages(conversation.id).first().single { it.role == MessageRole.ASSISTANT }
         assertEquals(MessageStatus.ERROR, assistant.status)
@@ -85,7 +85,7 @@ class SendChatMessageUseCaseTest {
             },
         )
         val useCase = SendChatMessageUseCase(conversationRepo, chatRepo)
-        val resultFlow = useCase(conversation.id, ProviderId.OPENAI, "gpt-4o", emptyList(), streaming = true)
+        val resultFlow = useCase(conversation.id, "config-1", ProviderId.OPENAI, "gpt-4o", emptyList(), streaming = true)
 
         val job = launch { resultFlow.collect { } }
         advanceTimeBy(1)

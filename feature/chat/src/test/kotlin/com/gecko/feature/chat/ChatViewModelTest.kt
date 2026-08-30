@@ -31,15 +31,18 @@ class ChatViewModelTest {
     @get:Rule
     val mainDispatcherRule = MainDispatcherRule()
 
-    private fun buildViewModel(
+    private suspend fun buildViewModel(
         conversationRepository: FakeConversationRepository = FakeConversationRepository(),
         providerConfigRepository: FakeProviderConfigRepository = FakeProviderConfigRepository(),
         chatCompletionRepository: FakeChatCompletionRepository = FakeChatCompletionRepository(),
         defaultProviderId: ProviderId? = ProviderId.OPENAI,
         defaultModelId: String? = "gpt-4o",
     ): ChatViewModel {
+        val defaultConfigId = defaultProviderId?.let {
+            providerConfigRepository.addProvider(it, it.displayName).getOrThrow()
+        }
         val userPreferencesRepository = FakeUserPreferencesRepository(
-            UserPreferences(defaultProviderId = defaultProviderId, defaultModelId = defaultModelId),
+            UserPreferences(defaultProviderConfigId = defaultConfigId, defaultModelId = defaultModelId),
         )
         return ChatViewModel(
             conversationRepository = conversationRepository,
@@ -169,15 +172,15 @@ class ChatViewModelTest {
     @Test
     fun modelSelectorObservesEnabledProviders() = runTest {
         val providerConfigRepository = FakeProviderConfigRepository()
-        val viewModel = buildViewModel(providerConfigRepository = providerConfigRepository)
+        val viewModel = buildViewModel(providerConfigRepository = providerConfigRepository, defaultProviderId = null)
 
         viewModel.uiState.test {
             var state = awaitItem()
-            while (state.providerConfigs.isEmpty()) state = awaitItem()
             assertEquals(0, state.enabledProviders.size)
 
-            providerConfigRepository.setEnabled(ProviderId.OPENAI, true)
-            providerConfigRepository.setHasApiKey(ProviderId.OPENAI, true)
+            val configId = providerConfigRepository.addProvider(ProviderId.OPENAI, "OpenAI").getOrThrow()
+            providerConfigRepository.setEnabled(configId, true)
+            providerConfigRepository.setHasApiKey(configId, true)
 
             state = awaitItem()
             while (state.enabledProviders.isEmpty()) state = awaitItem()

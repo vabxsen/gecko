@@ -14,24 +14,26 @@ class TestProviderConnectionUseCaseTest {
     @Test
     fun successUpdatesStatusToSuccess() = runTest {
         val configRepo = FakeProviderConfigRepository()
+        val id = configRepo.addProvider(ProviderId.OPENAI, "OpenAI").getOrThrow()
         val chatRepo = FakeChatCompletionRepository(testConnectionResult = Result.success(Unit))
         val useCase = TestProviderConnectionUseCase(chatRepo, configRepo)
 
-        val result = useCase(ProviderId.OPENAI)
+        val result = useCase(id)
 
         assertTrue(result.isSuccess)
-        assertEquals(ConnectionStatus.Success, configRepo.currentStatus(ProviderId.OPENAI))
+        assertEquals(ConnectionStatus.Success, configRepo.currentStatus(id))
     }
 
     @Test
     fun failureUpdatesStatusToFailureWithMessage() = runTest {
         val configRepo = FakeProviderConfigRepository()
+        val id = configRepo.addProvider(ProviderId.ANTHROPIC, "Anthropic").getOrThrow()
         val chatRepo = FakeChatCompletionRepository(testConnectionResult = Result.failure(IllegalStateException("Invalid key")))
         val useCase = TestProviderConnectionUseCase(chatRepo, configRepo)
 
-        val result = useCase(ProviderId.ANTHROPIC)
+        val result = useCase(id)
 
         assertTrue(result.isFailure)
-        assertEquals(ConnectionStatus.Failure("Invalid key"), configRepo.currentStatus(ProviderId.ANTHROPIC))
+        assertEquals(ConnectionStatus.Failure("Invalid key"), configRepo.currentStatus(id))
     }
 }

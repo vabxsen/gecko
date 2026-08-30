@@ -12,12 +12,15 @@ class ProviderMappersTest {
     @Test
     fun failureStatusRoundTripsWithMessage() {
         val entity = ProviderConfigEntity(
+            id = "config-1",
             providerId = ProviderId.OPENAI.slug,
+            label = "OpenAI",
             enabled = true,
             selectedModelId = "gpt-4o",
             baseUrlOverride = null,
             connectionStatus = ConnectionStatus.Failure("Invalid key").toWireString(),
             connectionErrorMessage = "Invalid key",
+            createdAt = 0L,
         )
 
         assertEquals(ConnectionStatus.Failure("Invalid key"), entity.toConnectionStatus())
@@ -26,12 +29,15 @@ class ProviderMappersTest {
     @Test
     fun untestedIsDefaultForUnknownStatus() {
         val entity = ProviderConfigEntity(
+            id = "config-1",
             providerId = ProviderId.OPENAI.slug,
+            label = "OpenAI",
             enabled = false,
             selectedModelId = null,
             baseUrlOverride = null,
             connectionStatus = "SOMETHING_UNEXPECTED",
             connectionErrorMessage = null,
+            createdAt = 0L,
         )
 
         assertEquals(ConnectionStatus.Untested, entity.toConnectionStatus())
@@ -48,7 +54,7 @@ class ProviderMappersTest {
             supportsImages = true,
         )
 
-        val roundTripped = model.toEntity().toDomain()
+        val roundTripped = model.toEntity("config-1").toDomain()
 
         assertEquals(model, roundTripped)
     }

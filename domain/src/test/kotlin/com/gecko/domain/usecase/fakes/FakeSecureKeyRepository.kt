@@ -1,20 +1,19 @@
 package com.gecko.domain.usecase.fakes
 
-import com.gecko.core.model.provider.ProviderId
 import com.gecko.domain.repository.SecureKeyRepository
 
 class FakeSecureKeyRepository : SecureKeyRepository {
-    private val keys = mutableMapOf<ProviderId, String>()
+    private val keys = mutableMapOf<String, String>()
 
-    override suspend fun saveApiKey(providerId: ProviderId, key: String) {
-        keys[providerId] = key
+    override suspend fun saveApiKey(id: String, key: String) {
+        keys[id] = key
     }
 
-    override suspend fun getApiKey(providerId: ProviderId): String? = keys[providerId]
+    override suspend fun getApiKey(id: String): String? = keys[id]
 
-    override suspend fun clearApiKey(providerId: ProviderId) {
-        keys.remove(providerId)
+    override suspend fun clearApiKey(id: String) {
+        keys.remove(id)
     }
 
-    override suspend fun hasApiKey(providerId: ProviderId): Boolean = keys.containsKey(providerId)
+    override suspend fun hasApiKey(id: String): Boolean = keys.containsKey(id)
 }

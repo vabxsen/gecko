@@ -18,27 +18,34 @@ class AiProvidersViewModelTest {
     val mainDispatcherRule = MainDispatcherRule()
 
     @Test
-    fun observesAllFourProviders() = runTest {
+    fun observesAddedProviders() = runTest {
         val repository = FakeProviderConfigRepository()
         val viewModel = AiProvidersViewModel(repository)
         backgroundScope.launch { viewModel.providerConfigs.collect {} }
         advanceUntilIdle()
 
-        assertEquals(ProviderId.entries.size, viewModel.providerConfigs.value.size)
+        assertEquals(0, viewModel.providerConfigs.value.size)
+
+        repository.addProvider(ProviderId.OPENAI, "OpenAI")
+        advanceUntilIdle()
+
+        assertEquals(1, viewModel.providerConfigs.value.size)
     }
 
     @Test
     fun settingEnabledUpdatesTheRightProvider() = runTest {
         val repository = FakeProviderConfigRepository()
+        val openAiId = repository.addProvider(ProviderId.OPENAI, "OpenAI").getOrThrow()
+        val anthropicId = repository.addProvider(ProviderId.ANTHROPIC, "Anthropic").getOrThrow()
         val viewModel = AiProvidersViewModel(repository)
         backgroundScope.launch { viewModel.providerConfigs.collect {} }
         advanceUntilIdle()
 
-        viewModel.setEnabled(ProviderId.ANTHROPIC, true)
+        viewModel.setEnabled(anthropicId, false)
         advanceUntilIdle()
 
         val configs = viewModel.providerConfigs.value
-        assertTrue(configs.first { it.providerId == ProviderId.ANTHROPIC }.enabled)
-        assertTrue(configs.filterNot { it.providerId == ProviderId.ANTHROPIC }.none { it.enabled })
+        assertTrue(configs.first { it.id == openAiId }.enabled)
+        assertTrue(configs.none { it.id == anthropicId && it.enabled })
     }
 }

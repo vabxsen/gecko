@@ -42,7 +42,7 @@ class ChatCompletionRepositoryImplTest {
 
     @Test
     fun sendMessageWithoutApiKeyEmitsErrorWithoutNetworkCall() = runTest {
-        repository.sendMessage(ProviderId.OPENAI, "gpt-4o", emptyList(), stream = true).test {
+        repository.sendMessage("missing-config", "gpt-4o", emptyList(), stream = true).test {
             val event = awaitItem() as ChatEvent.Error
             assertFalse(event.isRetryable)
             awaitComplete()
@@ -52,14 +52,15 @@ class ChatCompletionRepositoryImplTest {
 
     @Test
     fun sendMessageWithApiKeyUsesConfiguredBaseUrlOverride() = runTest {
-        secureKeyRepository.saveApiKey(ProviderId.OPENAI, "sk-test")
-        providerConfigRepository.setBaseUrlOverride(ProviderId.OPENAI, server.url("/v1").toString().trimEnd('/'))
+        val configId = providerConfigRepository.addProvider(ProviderId.OPENAI, "OpenAI").getOrThrow()
+        secureKeyRepository.saveApiKey(configId, "sk-test")
+        providerConfigRepository.setBaseUrlOverride(configId, server.url("/v1").toString().trimEnd('/'))
         server.enqueue(
             MockResponse().setBody("data: {\"choices\":[{\"delta\":{\"content\":\"Hi\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n")
                 .setHeader("Content-Type", "text/event-stream"),
         )
 
-        repository.sendMessage(ProviderId.OPENAI, "gpt-4o", emptyList(), stream = true).test {
+        repository.sendMessage(configId, "gpt-4o", emptyList(), stream = true).test {
             assertTrue(awaitItem() is ChatEvent.Started)
             assertEquals(ChatEvent.ContentDelta("Hi"), awaitItem())
             awaitItem() as ChatEvent.Completed

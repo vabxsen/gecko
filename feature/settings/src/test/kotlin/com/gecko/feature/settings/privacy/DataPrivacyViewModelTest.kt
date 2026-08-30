@@ -2,7 +2,7 @@ package com.gecko.feature.settings.privacy
 
 import com.gecko.core.model.provider.ProviderId
 import com.gecko.core.testing.fake.FakeConversationRepository
-import com.gecko.core.testing.fake.FakeSecureKeyRepository
+import com.gecko.core.testing.fake.FakeProviderConfigRepository
 import com.gecko.core.testing.fake.FakeUserPreferencesRepository
 import com.gecko.core.testing.rule.MainDispatcherRule
 import com.gecko.domain.usecase.ClearAllLocalDataUseCase
@@ -10,7 +10,6 @@ import com.gecko.domain.usecase.ExportConversationsUseCase
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -28,7 +27,7 @@ class DataPrivacyViewModelTest {
         val viewModel = DataPrivacyViewModel(
             conversationRepository,
             ExportConversationsUseCase(conversationRepository),
-            ClearAllLocalDataUseCase(conversationRepository, FakeSecureKeyRepository(), FakeUserPreferencesRepository()),
+            ClearAllLocalDataUseCase(conversationRepository, FakeProviderConfigRepository(), FakeUserPreferencesRepository()),
         )
 
         viewModel.prepareExport()
@@ -45,7 +44,7 @@ class DataPrivacyViewModelTest {
         val viewModel = DataPrivacyViewModel(
             conversationRepository,
             ExportConversationsUseCase(conversationRepository),
-            ClearAllLocalDataUseCase(conversationRepository, FakeSecureKeyRepository(), FakeUserPreferencesRepository()),
+            ClearAllLocalDataUseCase(conversationRepository, FakeProviderConfigRepository(), FakeUserPreferencesRepository()),
         )
 
         viewModel.deleteAllConversations()
@@ -58,17 +57,17 @@ class DataPrivacyViewModelTest {
     @Test
     fun clearAllLocalDataClearsKeysToo() = runTest {
         val conversationRepository = FakeConversationRepository()
-        val secureKeyRepository = FakeSecureKeyRepository()
-        secureKeyRepository.saveApiKey(ProviderId.OPENAI, "sk-test")
+        val providerConfigRepository = FakeProviderConfigRepository()
+        providerConfigRepository.addProvider(ProviderId.OPENAI, "OpenAI")
         val viewModel = DataPrivacyViewModel(
             conversationRepository,
             ExportConversationsUseCase(conversationRepository),
-            ClearAllLocalDataUseCase(conversationRepository, secureKeyRepository, FakeUserPreferencesRepository()),
+            ClearAllLocalDataUseCase(conversationRepository, providerConfigRepository, FakeUserPreferencesRepository()),
         )
 
         viewModel.clearAllLocalData()
         advanceUntilIdle()
 
-        assertFalse(secureKeyRepository.hasApiKey(ProviderId.OPENAI))
+        assertTrue(providerConfigRepository.clearAllCalled)
     }
 }

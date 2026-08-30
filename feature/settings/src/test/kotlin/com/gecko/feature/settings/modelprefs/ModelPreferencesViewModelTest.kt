@@ -29,8 +29,9 @@ class ModelPreferencesViewModelTest {
 
         assertTrue(viewModel.uiState.value.enabledProviders.isEmpty())
 
-        providerConfigRepository.setEnabled(ProviderId.OPENAI, true)
-        providerConfigRepository.setHasApiKey(ProviderId.OPENAI, true)
+        val configId = providerConfigRepository.addProvider(ProviderId.OPENAI, "OpenAI").getOrThrow()
+        providerConfigRepository.setEnabled(configId, true)
+        providerConfigRepository.setHasApiKey(configId, true)
         advanceUntilIdle()
 
         assertEquals(1, viewModel.uiState.value.enabledProviders.size)
@@ -44,15 +45,17 @@ class ModelPreferencesViewModelTest {
         backgroundScope.launch { viewModel.uiState.collect {} }
         advanceUntilIdle()
 
-        userPreferencesRepository.setDefaultProvider(ProviderId.OPENAI)
+        val openAiConfigId = providerConfigRepository.addProvider(ProviderId.OPENAI, "OpenAI").getOrThrow()
+        val anthropicConfigId = providerConfigRepository.addProvider(ProviderId.ANTHROPIC, "Anthropic").getOrThrow()
+        userPreferencesRepository.setDefaultProviderConfig(openAiConfigId)
         userPreferencesRepository.setDefaultModel("gpt-4o")
         advanceUntilIdle()
 
-        viewModel.selectDefaultProvider(ProviderId.ANTHROPIC)
+        viewModel.selectDefaultProvider(anthropicConfigId)
         advanceUntilIdle()
 
         val prefs = userPreferencesRepository.userPreferences.value
-        assertEquals(ProviderId.ANTHROPIC, prefs.defaultProviderId)
+        assertEquals(anthropicConfigId, prefs.defaultProviderConfigId)
         assertEquals(null, prefs.defaultModelId)
     }
 
@@ -64,9 +67,10 @@ class ModelPreferencesViewModelTest {
         backgroundScope.launch { viewModel.uiState.collect {} }
         advanceUntilIdle()
 
-        userPreferencesRepository.setDefaultProvider(ProviderId.OPENAI)
+        val configId = providerConfigRepository.addProvider(ProviderId.OPENAI, "OpenAI").getOrThrow()
+        userPreferencesRepository.setDefaultProviderConfig(configId)
         providerConfigRepository.saveModels(
-            ProviderId.OPENAI,
+            configId,
             listOf(ModelInfo(ProviderId.OPENAI, "gpt-4o", "GPT-4o", 128_000, true, true)),
         )
         advanceUntilIdle()

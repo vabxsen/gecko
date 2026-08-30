@@ -4,7 +4,6 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.gecko.core.model.preferences.ThemeMode
-import com.gecko.core.model.provider.ProviderId
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Before
@@ -40,7 +39,7 @@ class UserPreferencesDataSourceTest {
 
         assertEquals(ThemeMode.SYSTEM, prefs.themeMode)
         assertFalse(prefs.dynamicColorEnabled)
-        assertNull(prefs.defaultProviderId)
+        assertNull(prefs.defaultProviderConfigId)
         assertTrueSendOnEnterDefault(prefs.sendOnEnter)
     }
 
@@ -55,17 +54,17 @@ class UserPreferencesDataSourceTest {
 
     @Test
     fun settingDefaultProviderPersists() = runTest {
-        dataSource.setDefaultProvider(ProviderId.ANTHROPIC)
+        dataSource.setDefaultProviderConfig("config-1")
 
-        assertEquals(ProviderId.ANTHROPIC, dataSource.userPreferences.first().defaultProviderId)
+        assertEquals("config-1", dataSource.userPreferences.first().defaultProviderConfigId)
     }
 
     @Test
     fun clearingDefaultProviderRemovesIt() = runTest {
-        dataSource.setDefaultProvider(ProviderId.OPENAI)
-        dataSource.setDefaultProvider(null)
+        dataSource.setDefaultProviderConfig("config-1")
+        dataSource.setDefaultProviderConfig(null)
 
-        assertNull(dataSource.userPreferences.first().defaultProviderId)
+        assertNull(dataSource.userPreferences.first().defaultProviderConfigId)
     }
 
     @Test
