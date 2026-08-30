@@ -1,6 +1,11 @@
 package com.gecko.feature.chat.component
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import android.util.Base64
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -18,6 +23,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -25,6 +31,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Mic as FilledMic
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Mic
@@ -37,6 +44,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,11 +56,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import com.gecko.core.designsystem.theme.GeckoMotion
 import kotlinx.coroutines.launch
 
@@ -69,6 +79,7 @@ fun MessageComposer(
     var text by rememberSaveable { mutableStateOf("") }
     var attachmentBase64 by remember { mutableStateOf<String?>(null) }
     var isEncodingAttachment by remember { mutableStateOf(false) }
+    var isListening by remember { mutableStateOf(false) }
 
     val pickMedia = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) {
@@ -77,6 +88,68 @@ fun MessageComposer(
                 attachmentBase64 = encodeImageAttachment(context, uri)
                 isEncodingAttachment = false
             }
+        }
+    }
+
+    val speechRecognizer = remember {
+        if (SpeechRecognizer.isRecognitionAvailable(context)) {
+            SpeechRecognizer.createSpeechRecognizer(context)
+        } else {
+            null
+        }
+    }
+    DisposableEffect(speechRecognizer) {
+        speechRecognizer?.setRecognitionListener(object : RecognitionListener {
+            override fun onReadyForSpeech(params: android.os.Bundle?) = Unit
+            override fun onBeginningOfSpeech() = Unit
+            override fun onRmsChanged(rmsdB: Float) = Unit
+            override fun onBufferReceived(buffer: ByteArray?) = Unit
+            override fun onEndOfSpeech() {
+                isListening = false
+            }
+            override fun onError(error: Int) {
+                isListening = false
+            }
+            override fun onResults(results: android.os.Bundle?) {
+                isListening = false
+                val spokenText = results
+                    ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                    ?.firstOrNull()
+                if (!spokenText.isNullOrBlank()) {
+                    text = if (text.isBlank()) spokenText else "$text $spokenText"
+                }
+            }
+            override fun onPartialResults(partialResults: android.os.Bundle?) = Unit
+            override fun onEvent(eventType: Int, params: android.os.Bundle?) = Unit
+        })
+        onDispose { speechRecognizer?.destroy() }
+    }
+
+    val requestAudioPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            speechRecognizer?.startListening(createSpeechRecognitionIntent())
+            isListening = true
+        }
+    }
+
+    fun onMicClick() {
+        val recognizer = speechRecognizer ?: return
+        if (isListening) {
+            recognizer.stopListening()
+            isListening = false
+            return
+        }
+        val hasPermission = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.RECORD_AUDIO,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (hasPermission) {
+            recognizer.startListening(createSpeechRecognitionIntent())
+            isListening = true
+        } else {
+            requestAudioPermission.launch(Manifest.permission.RECORD_AUDIO)
         }
     }
 
@@ -89,7 +162,7 @@ fun MessageComposer(
 
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = RoundedCornerShape(50),
+        shape = RoundedCornerShape(28.dp),
         modifier = modifier.fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) {
@@ -153,11 +226,15 @@ fun MessageComposer(
                         onClick = onStop,
                     )
                 } else {
-                    IconButton(onClick = { /* voice input not implemented yet */ }) {
+                    IconButton(onClick = ::onMicClick) {
                         Icon(
-                            imageVector = Icons.Outlined.Mic,
-                            contentDescription = "Voice input",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            imageVector = if (isListening) Icons.Filled.FilledMic else Icons.Outlined.Mic,
+                            contentDescription = if (isListening) "Stop voice input" else "Voice input",
+                            tint = if (isListening) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
                         )
                     }
                     val canSend = text.isNotBlank() || attachmentBase64 != null
@@ -225,7 +302,7 @@ private fun AttachmentPreviewChip(base64: String, onRemove: () -> Unit) {
         }.getOrNull()
     }
     Row(
-        modifier = Modifier.padding(start = 8.dp, top = 4.dp, bottom = 4.dp),
+        modifier = Modifier.padding(start = 10.dp, end = 10.dp, top = 10.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box {
@@ -233,24 +310,38 @@ private fun AttachmentPreviewChip(base64: String, onRemove: () -> Unit) {
                 Image(
                     bitmap = bitmap.asImageBitmap(),
                     contentDescription = "Attached image",
+                    contentScale = ContentScale.Crop,
                     modifier = Modifier
-                        .size(56.dp)
-                        .clip(RoundedCornerShape(10.dp)),
+                        .size(96.dp)
+                        .clip(RoundedCornerShape(16.dp)),
                 )
             }
             IconButton(
                 onClick = onRemove,
                 modifier = Modifier
-                    .size(20.dp)
-                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.6f), CircleShape),
+                    .align(Alignment.TopEnd)
+                    .offset(x = 6.dp, y = (-6).dp),
             ) {
-                Icon(
-                    imageVector = Icons.Outlined.Close,
-                    contentDescription = "Remove attachment",
-                    tint = MaterialTheme.colorScheme.surface,
-                    modifier = Modifier.size(14.dp),
-                )
+                Box(
+                    modifier = Modifier
+                        .size(20.dp)
+                        .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.7f), CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Close,
+                        contentDescription = "Remove attachment",
+                        tint = MaterialTheme.colorScheme.surface,
+                        modifier = Modifier.size(13.dp),
+                    )
+                }
             }
         }
     }
 }
+
+private fun createSpeechRecognitionIntent() =
+    android.content.Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+        putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+        putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+    }

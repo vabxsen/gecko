@@ -11,8 +11,11 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
@@ -45,6 +48,14 @@ private fun GeckoApp(appViewModel: GeckoAppViewModel = hiltViewModel()) {
         ThemeMode.LIGHT -> false
         ThemeMode.DARK -> true
         ThemeMode.SYSTEM -> isSystemInDarkTheme()
+    }
+
+    val view = LocalView.current
+    SideEffect {
+        val window = (view.context as android.app.Activity).window
+        val insetsController = WindowCompat.getInsetsController(window, view)
+        insetsController.isAppearanceLightStatusBars = !darkTheme
+        insetsController.isAppearanceLightNavigationBars = !darkTheme
     }
 
     GeckoTheme(darkTheme = darkTheme, dynamicColor = preferences.dynamicColorEnabled) {
