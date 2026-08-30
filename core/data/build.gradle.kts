@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.orca.core.data"
+    namespace = "com.gecko.core.data"
     compileSdk = 36
 
     defaultConfig {

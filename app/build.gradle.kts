@@ -8,11 +8,11 @@ plugins {
 }
 
 android {
-    namespace = "com.orca.app"
+    namespace = "com.gecko.app"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.orca.app"
+        applicationId = "com.gecko.app"
         minSdk = 26
         targetSdk = 36
         versionCode = 1

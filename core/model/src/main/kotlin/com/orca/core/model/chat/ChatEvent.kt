@@ -1,8 +1,0 @@
-package com.orca.core.model.chat
-
-sealed interface ChatEvent {
-    data class Started(val providerMessageId: String? = null) : ChatEvent
-    data class ContentDelta(val text: String) : ChatEvent
-    data class Completed(val finishReason: FinishReason, val usage: TokenUsage?) : ChatEvent
-    data class Error(val message: String, val cause: Throwable?, val isRetryable: Boolean) : ChatEvent
-}

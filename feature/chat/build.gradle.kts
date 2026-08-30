@@ -8,7 +8,7 @@ plugins {
 }
 
 android {
-    namespace = "com.orca.feature.chat"
+    namespace = "com.gecko.feature.chat"
     compileSdk = 36
 
     defaultConfig {

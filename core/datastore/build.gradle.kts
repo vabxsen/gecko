@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.orca.core.datastore"
+    namespace = "com.gecko.core.datastore"
     compileSdk = 36
 
     defaultConfig {

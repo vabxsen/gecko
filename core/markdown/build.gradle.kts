@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.orca.core.markdown"
+    namespace = "com.gecko.core.markdown"
     compileSdk = 36
 
     defaultConfig {

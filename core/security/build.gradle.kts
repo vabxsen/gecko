@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.orca.core.security"
+    namespace = "com.gecko.core.security"
     compileSdk = 36
 
     defaultConfig {

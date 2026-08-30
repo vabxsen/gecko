@@ -14,7 +14,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Orca"
+rootProject.name = "Gecko"
 
 include(":app")
 include(":core:model")

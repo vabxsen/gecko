@@ -11,17 +11,17 @@
     kotlinx.serialization.KSerializer serializer(...);
 }
 
--keep,includedescriptorclasses class com.orca.**$$serializer { *; }
--keepclassmembers class com.orca.** {
+-keep,includedescriptorclasses class com.gecko.**$$serializer { *; }
+-keepclassmembers class com.gecko.** {
     *** Companion;
 }
--keepclasseswithmembers class com.orca.** {
+-keepclasseswithmembers class com.gecko.** {
     kotlinx.serialization.KSerializer serializer(...);
 }
 
 # Room entities/DAOs are referenced directly by KSP-generated code, not reflection,
 # but keep entity field names stable in case of future schema export tooling.
--keep class com.orca.core.database.entity.** { *; }
+-keep class com.gecko.core.database.entity.** { *; }
 
 # OkHttp/okhttp-sse platform detection touches optional classes that don't exist on
 # Android; R8 warnings about these are expected and harmless.

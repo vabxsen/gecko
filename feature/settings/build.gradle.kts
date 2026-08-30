@@ -8,7 +8,7 @@ plugins {
 }
 
 android {
-    namespace = "com.orca.feature.settings"
+    namespace = "com.gecko.feature.settings"
     compileSdk = 36
 
     defaultConfig {
