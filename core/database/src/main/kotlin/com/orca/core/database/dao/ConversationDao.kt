@@ -29,6 +29,9 @@ interface ConversationDao {
     @Query("UPDATE conversations SET pinned = :pinned, updatedAt = :updatedAt WHERE id = :id")
     suspend fun setPinned(id: String, pinned: Boolean, updatedAt: Long)
 
+    @Query("UPDATE conversations SET updatedAt = :updatedAt WHERE id = :id")
+    suspend fun touch(id: String, updatedAt: Long)
+
     @Query("DELETE FROM conversations WHERE id = :id")
     suspend fun deleteById(id: String)
 

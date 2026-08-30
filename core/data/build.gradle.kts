@@ -2,11 +2,11 @@ plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.ksp)
-    alias(libs.plugins.room)
+    alias(libs.plugins.hilt)
 }
 
 android {
-    namespace = "com.orca.core.database"
+    namespace = "com.orca.core.data"
     compileSdk = 36
 
     defaultConfig {
@@ -17,13 +17,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-
-    testOptions {
-        unitTests {
-            isIncludeAndroidResources = true
-            isReturnDefaultValues = true
-        }
-    }
 }
 
 kotlin {
@@ -32,25 +25,25 @@ kotlin {
     }
 }
 
-room {
-    schemaDirectory("$projectDir/schemas")
-}
-
 dependencies {
+    api(project(":domain"))
     implementation(project(":core:model"))
     implementation(project(":core:common"))
+    implementation(project(":core:database"))
+    implementation(project(":core:datastore"))
+    implementation(project(":core:security"))
+    implementation(project(":core:provider"))
+    implementation(project(":core:network"))
 
-    api(libs.room.runtime)
-    api(libs.room.ktx)
-    ksp(libs.room.compiler)
-
+    implementation(libs.okhttp)
     implementation(libs.kotlinx.coroutines.core)
+
+    implementation(libs.hilt.android)
+    ksp(libs.hilt.compiler)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
-    testImplementation(libs.robolectric)
-    testImplementation(libs.androidx.test.ext.junit)
-    testImplementation(libs.androidx.test.core)
-    androidTestImplementation(libs.androidx.test.ext.junit)
-    androidTestImplementation(libs.androidx.test.runner)
+    testImplementation(libs.turbine)
+    testImplementation(libs.okhttp.mockwebserver)
+    testImplementation(project(":core:testing"))
 }

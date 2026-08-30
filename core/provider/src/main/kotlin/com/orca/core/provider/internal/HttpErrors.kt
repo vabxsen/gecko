@@ -10,7 +10,7 @@ internal fun Response.bodyOrThrow(): String {
     val successful = isSuccessful
     val code = code
     val fallbackMessage = message
-    val bodyText = use { response -> response.body.string() }
+    val bodyText = use { response -> response.body?.string().orEmpty() }
     if (!successful) {
         throw ProviderHttpException(code = code, message = bodyText.ifBlank { fallbackMessage })
     }
