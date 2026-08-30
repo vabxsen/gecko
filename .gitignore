@@ -11,3 +11,11 @@ local.properties
 **/build/
 *.hprof
 .kotlin/
+
+# Release signing — never commit the keystore or its credentials
+*.jks
+*.keystore
+keystore.properties
+
+# Built APKs are distributed via GitHub Releases, not tracked in-repo
+*.apk
