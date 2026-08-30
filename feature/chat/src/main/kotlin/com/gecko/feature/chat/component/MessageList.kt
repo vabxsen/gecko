@@ -64,6 +64,7 @@ fun MessageList(
                     onSubmitEdit = onSubmitEdit,
                     onCancelEdit = onCancelEdit,
                     onRegenerate = onRegenerate,
+                    modifier = Modifier.animateItem(),
                 )
             }
             item { androidx.compose.foundation.layout.Spacer(Modifier.padding(bottom = 80.dp)) }

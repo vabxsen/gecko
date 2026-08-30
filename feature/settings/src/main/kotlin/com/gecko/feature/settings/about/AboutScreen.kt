@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.gecko.feature.settings.component.SettingsRow
 import com.gecko.feature.settings.component.SettingsSectionHeader
 import com.gecko.feature.settings.component.SettingsTopBar
@@ -33,7 +34,12 @@ fun AboutScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 modifier = Modifier.fillMaxWidth().padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text(text = "Gecko", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
+                Text(
+                    text = "Gecko",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Medium,
+                    letterSpacing = (-0.5).sp,
+                )
                 Text(
                     text = "Version $versionName",
                     style = MaterialTheme.typography.bodyMedium,

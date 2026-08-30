@@ -3,6 +3,10 @@ package com.gecko.feature.chat.component
 import android.graphics.BitmapFactory
 import android.util.Base64
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.Image
@@ -47,6 +51,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
+import com.gecko.core.designsystem.theme.GeckoMotion
 import com.gecko.core.markdown.GeckoMarkdown
 import com.gecko.core.model.chat.ChatMessage
 import com.gecko.core.model.chat.MessageRole
@@ -178,13 +183,27 @@ private fun AssistantMessage(
 
 @Composable
 private fun ThinkingIndicator() {
+    val transition = rememberInfiniteTransition(label = "thinkingPulse")
+    val alpha by transition.animateFloat(
+        initialValue = 0.4f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(GeckoMotion.DURATION_EMPHASIZED * 2, easing = GeckoMotion.EasingStandard),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "thinkingPulseAlpha",
+    )
     Row(verticalAlignment = Alignment.CenterVertically) {
         CircularProgressIndicator(
             modifier = Modifier.padding(end = 8.dp).size(16.dp),
             strokeWidth = 2.dp,
             color = MaterialTheme.colorScheme.primary,
         )
-        Text(text = "Thinking…", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            text = "Thinking…",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha),
+        )
     }
 }
 

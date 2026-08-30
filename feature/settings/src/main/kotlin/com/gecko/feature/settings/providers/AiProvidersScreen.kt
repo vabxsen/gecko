@@ -1,5 +1,7 @@
 package com.gecko.feature.settings.providers
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -23,6 +25,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.gecko.core.designsystem.theme.GeckoMotion
 import com.gecko.core.model.provider.ConnectionStatus
 import com.gecko.core.model.provider.ProviderConfig
 import com.gecko.feature.settings.component.SettingsContentPadding
@@ -51,6 +54,7 @@ fun AiProvidersScreen(
                     config = config,
                     onClick = { onOpenProvider(config.providerId.slug) },
                     onToggleEnabled = { enabled -> viewModel.setEnabled(config.providerId, enabled) },
+                    modifier = Modifier.animateItem(),
                 )
             }
         }
@@ -58,11 +62,17 @@ fun AiProvidersScreen(
 }
 
 @Composable
-private fun ProviderRow(config: ProviderConfig, onClick: () -> Unit, onToggleEnabled: (Boolean) -> Unit) {
+private fun ProviderRow(
+    config: ProviderConfig,
+    onClick: () -> Unit,
+    onToggleEnabled: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     SettingsRow(
         title = config.providerId.displayName,
         subtitle = statusLabel(config),
         onClick = onClick,
+        modifier = modifier,
         leading = { StatusDot(config.connectionStatus) },
         trailing = {
             androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
@@ -83,11 +93,16 @@ private fun StatusDot(status: ConnectionStatus) {
         CircularProgressIndicator(modifier = Modifier.size(10.dp), strokeWidth = 1.5.dp)
         return
     }
-    val color = when (status) {
-        ConnectionStatus.Success -> Color(0xFF2DD4BF)
+    val targetColor = when (status) {
+        ConnectionStatus.Success -> Color(0xFF16A34A)
         is ConnectionStatus.Failure -> MaterialTheme.colorScheme.error
         else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
     }
+    val color by animateColorAsState(
+        targetValue = targetColor,
+        animationSpec = tween(GeckoMotion.DURATION_STANDARD, easing = GeckoMotion.EasingStandard),
+        label = "statusDotColor",
+    )
     androidx.compose.foundation.layout.Box(
         modifier = Modifier
             .size(10.dp)

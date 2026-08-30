@@ -1,6 +1,8 @@
 package com.gecko.feature.chat
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -27,12 +29,12 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.gecko.core.designsystem.theme.GeckoMotion
 import com.gecko.feature.chat.component.ChatTopBar
 import com.gecko.feature.chat.component.ConversationDrawerContent
 import com.gecko.feature.chat.component.EmptyChatState
 import com.gecko.feature.chat.component.MessageComposer
 import com.gecko.feature.chat.component.MessageList
-import com.gecko.feature.chat.component.ModelSelectorDropdown
 import kotlinx.coroutines.launch
 
 /** Screens at least this wide get a permanent side rail instead of a swipe-away drawer. */
@@ -148,16 +150,6 @@ private fun ChatContent(
                 title = uiState.currentConversation?.title ?: "New chat",
                 showMenuButton = showMenuButton,
                 onOpenDrawer = onOpenDrawer,
-                modelSelector = {
-                    ModelSelectorDropdown(
-                        enabledProviders = uiState.enabledProviders,
-                        selectedProviderId = uiState.selectedProviderId,
-                        selectedModelId = uiState.selectedModelId,
-                        modelsForSelectedProvider = uiState.availableModels,
-                        onSelectProvider = viewModel::selectProvider,
-                        onSelectModel = viewModel::selectModel,
-                    )
-                },
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -169,23 +161,30 @@ private fun ChatContent(
                 onStop = viewModel::stopGeneration,
                 modifier = Modifier
                     .imePadding()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                    .padding(horizontal = 12.dp)
+                    .padding(top = 8.dp, bottom = 32.dp),
             )
         },
     ) { innerPadding ->
-        if (uiState.messages.isEmpty()) {
-            EmptyChatState(modifier = Modifier.padding(innerPadding))
-        } else {
-            MessageList(
-                messages = uiState.messages,
-                editingMessageId = uiState.editingMessageId,
-                isGenerating = uiState.isGenerating,
-                onBeginEdit = viewModel::beginEdit,
-                onSubmitEdit = viewModel::submitEdit,
-                onCancelEdit = viewModel::cancelEdit,
-                onRegenerate = viewModel::regenerate,
-                modifier = Modifier.padding(innerPadding),
-            )
+        Crossfade(
+            targetState = uiState.messages.isEmpty(),
+            animationSpec = tween(GeckoMotion.DURATION_EMPHASIZED, easing = GeckoMotion.EasingStandard),
+            label = "chatContentCrossfade",
+        ) { isEmpty ->
+            if (isEmpty) {
+                EmptyChatState(modifier = Modifier.padding(innerPadding))
+            } else {
+                MessageList(
+                    messages = uiState.messages,
+                    editingMessageId = uiState.editingMessageId,
+                    isGenerating = uiState.isGenerating,
+                    onBeginEdit = viewModel::beginEdit,
+                    onSubmitEdit = viewModel::submitEdit,
+                    onCancelEdit = viewModel::cancelEdit,
+                    onRegenerate = viewModel::regenerate,
+                    modifier = Modifier.padding(innerPadding),
+                )
+            }
         }
     }
 }

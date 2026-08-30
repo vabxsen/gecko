@@ -5,6 +5,13 @@ import android.util.Base64
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -16,10 +23,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -39,11 +47,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
+import com.gecko.core.designsystem.theme.GeckoMotion
 import kotlinx.coroutines.launch
 
 @Composable
@@ -79,33 +89,55 @@ fun MessageComposer(
 
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = RoundedCornerShape(28.dp),
+        shape = RoundedCornerShape(50),
         modifier = modifier.fillMaxWidth(),
     ) {
-        Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)) {
-            attachmentBase64?.let { base64 ->
-                AttachmentPreviewChip(base64 = base64, onRemove = { attachmentBase64 = null })
+        Column(modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) {
+            AnimatedVisibility(
+                visible = attachmentBase64 != null,
+                enter = fadeIn(tween(GeckoMotion.DURATION_STANDARD)) + expandVertically(tween(GeckoMotion.DURATION_STANDARD, easing = GeckoMotion.EasingEmphasized)),
+                exit = fadeOut(tween(GeckoMotion.DURATION_QUICK)) + shrinkVertically(tween(GeckoMotion.DURATION_QUICK)),
+            ) {
+                attachmentBase64?.let { base64 ->
+                    AttachmentPreviewChip(base64 = base64, onRemove = { attachmentBase64 = null })
+                }
             }
-            Row(verticalAlignment = Alignment.Bottom) {
-                IconButton(onClick = { pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) {
-                    if (isEncodingAttachment) {
-                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                    } else {
-                        Icon(
-                            imageVector = Icons.Outlined.AttachFile,
-                            contentDescription = "Attach image",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(
+                    onClick = { pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                    enabled = !isEncodingAttachment,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .background(MaterialTheme.colorScheme.primary, CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (isEncodingAttachment) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary,
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Filled.Add,
+                                contentDescription = "Add attachment",
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
                     }
                 }
                 TextField(
                     value = text,
                     onValueChange = { text = it },
                     modifier = Modifier.weight(1f),
-                    placeholder = { Text("Message Gecko…") },
+                    placeholder = { Text("What's up…") },
                     maxLines = 6,
                     keyboardOptions = KeyboardOptions(imeAction = if (sendOnEnter) ImeAction.Send else ImeAction.Default),
                     keyboardActions = KeyboardActions(onSend = { send() }),
+                    textStyle = MaterialTheme.typography.bodyLarge,
                     colors = TextFieldDefaults.colors(
                         focusedContainerColor = androidx.compose.ui.graphics.Color.Transparent,
                         unfocusedContainerColor = androidx.compose.ui.graphics.Color.Transparent,
@@ -114,24 +146,72 @@ fun MessageComposer(
                     ),
                 )
                 if (isGenerating) {
-                    IconButton(onClick = onStop) {
-                        Icon(
-                            imageVector = Icons.Filled.Stop,
-                            contentDescription = "Stop generating",
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
-                    }
+                    ComposerActionButton(
+                        icon = Icons.Filled.Stop,
+                        contentDescription = "Stop generating",
+                        enabled = true,
+                        onClick = onStop,
+                    )
                 } else {
-                    val canSend = text.isNotBlank() || attachmentBase64 != null
-                    IconButton(onClick = ::send, enabled = canSend) {
+                    IconButton(onClick = { /* voice input not implemented yet */ }) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.Send,
-                            contentDescription = "Send message",
-                            tint = if (canSend) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                            imageVector = Icons.Outlined.Mic,
+                            contentDescription = "Voice input",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                    val canSend = text.isNotBlank() || attachmentBase64 != null
+                    ComposerActionButton(
+                        icon = Icons.Filled.ArrowUpward,
+                        contentDescription = "Send message",
+                        enabled = canSend,
+                        onClick = ::send,
+                    )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ComposerActionButton(
+    icon: ImageVector,
+    contentDescription: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    val colorAnimSpec = tween<androidx.compose.ui.graphics.Color>(GeckoMotion.DURATION_QUICK, easing = GeckoMotion.EasingStandard)
+    val containerColor by animateColorAsState(
+        targetValue = if (enabled) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.15f)
+        },
+        animationSpec = colorAnimSpec,
+        label = "composerActionContainerColor",
+    )
+    val contentColor by animateColorAsState(
+        targetValue = if (enabled) {
+            MaterialTheme.colorScheme.onPrimary
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+        },
+        animationSpec = colorAnimSpec,
+        label = "composerActionContentColor",
+    )
+    IconButton(onClick = onClick, enabled = enabled) {
+        Box(
+            modifier = Modifier
+                .size(38.dp)
+                .background(containerColor, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                tint = contentColor,
+                modifier = Modifier.size(20.dp),
+            )
         }
     }
 }
