@@ -201,7 +201,7 @@ private fun MessageActionsRow(alignEnd: Boolean, content: @Composable RowScope.(
 
 @Composable
 private fun ActionIcon(icon: ImageVector, contentDescription: String, onClick: () -> Unit) {
-    IconButton(onClick = onClick, modifier = Modifier.size(32.dp)) {
+    IconButton(onClick = onClick) {
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
@@ -220,7 +220,6 @@ private fun CopyActionIcon(text: String) {
             clipboard.setText(AnnotatedString(text))
             copied = true
         },
-        modifier = Modifier.size(32.dp),
     ) {
         Icon(
             imageVector = Icons.Outlined.ContentCopy,
