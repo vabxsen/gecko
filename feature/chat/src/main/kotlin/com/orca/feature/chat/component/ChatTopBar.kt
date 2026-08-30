@@ -20,12 +20,15 @@ fun ChatTopBar(
     onOpenDrawer: () -> Unit,
     modelSelector: @Composable () -> Unit,
     modifier: Modifier = Modifier,
+    showMenuButton: Boolean = true,
 ) {
     TopAppBar(
         modifier = modifier,
         navigationIcon = {
-            IconButton(onClick = onOpenDrawer) {
-                Icon(imageVector = Icons.Outlined.Menu, contentDescription = "Open conversations")
+            if (showMenuButton) {
+                IconButton(onClick = onOpenDrawer) {
+                    Icon(imageVector = Icons.Outlined.Menu, contentDescription = "Open conversations")
+                }
             }
         },
         title = {
