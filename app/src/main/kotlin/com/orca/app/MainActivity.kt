@@ -14,13 +14,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.orca.core.designsystem.theme.OrcaTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            MaterialTheme {
+            OrcaTheme {
                 OrcaScaffoldPlaceholder()
             }
         }
@@ -29,15 +30,15 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun OrcaScaffoldPlaceholder() {
-    Surface(modifier = Modifier.fillMaxSize()) {
-        Scaffold { innerPadding ->
+    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Scaffold(containerColor = MaterialTheme.colorScheme.background) { innerPadding ->
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding),
                 contentAlignment = Alignment.Center
             ) {
-                Text(text = "Orca")
+                Text(text = "Orca", style = MaterialTheme.typography.displayMedium)
             }
         }
     }

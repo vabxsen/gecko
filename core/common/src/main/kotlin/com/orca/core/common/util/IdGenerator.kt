@@ -1,0 +1,5 @@
+package com.orca.core.common.util
+
+import java.util.UUID
+
+fun newId(): String = UUID.randomUUID().toString()
