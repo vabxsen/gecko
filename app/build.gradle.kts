@@ -57,6 +57,7 @@ dependencies {
     implementation(project(":core:data"))
     implementation(project(":domain"))
     implementation(project(":feature:chat"))
+    implementation(project(":feature:settings"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)

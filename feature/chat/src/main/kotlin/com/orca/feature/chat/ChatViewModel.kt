@@ -100,6 +100,7 @@ class ChatViewModel @Inject constructor(
             editingMessageId = misc.editingId,
             errorMessage = misc.error,
             sendOnEnter = prefs.sendOnEnter,
+            streamingEnabled = prefs.streamingEnabled,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ChatUiState())
 
@@ -147,7 +148,7 @@ class ChatViewModel @Inject constructor(
             maybeAutoTitle(conversationId, history, trimmed)
 
             runGeneration {
-                sendChatMessageUseCase(conversationId, providerId, modelId, history + userMessage, streaming = true)
+                sendChatMessageUseCase(conversationId, providerId, modelId, history + userMessage, streaming = uiState.value.streamingEnabled)
             }
         }
     }
@@ -156,7 +157,7 @@ class ChatViewModel @Inject constructor(
         val conversationId = currentConversationId.value ?: return
         val providerId = selectedProviderId.value ?: return
         val modelId = selectedModelId.value ?: return
-        runGeneration { regenerateResponseUseCase(conversationId, providerId, modelId, streaming = true) }
+        runGeneration { regenerateResponseUseCase(conversationId, providerId, modelId, streaming = uiState.value.streamingEnabled) }
     }
 
     fun stopGeneration() {
@@ -180,7 +181,7 @@ class ChatViewModel @Inject constructor(
         val providerId = selectedProviderId.value ?: return
         val modelId = selectedModelId.value ?: return
         editingMessageId.value = null
-        runGeneration { editAndResendMessageUseCase(conversationId, messageId, trimmed, providerId, modelId, streaming = true) }
+        runGeneration { editAndResendMessageUseCase(conversationId, messageId, trimmed, providerId, modelId, streaming = uiState.value.streamingEnabled) }
     }
 
     fun renameConversation(conversationId: String, title: String) {

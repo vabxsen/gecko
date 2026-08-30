@@ -17,6 +17,8 @@ import com.orca.core.designsystem.theme.OrcaTheme
 import com.orca.core.model.preferences.ThemeMode
 import com.orca.feature.chat.ChatScreen
 import com.orca.feature.chat.navigation.ChatRoute
+import com.orca.feature.settings.navigation.SettingsRoute
+import com.orca.feature.settings.navigation.settingsGraph
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -49,7 +51,8 @@ private fun OrcaNavHost() {
     val navController = rememberNavController()
     NavHost(navController = navController, startDestination = ChatRoute, modifier = Modifier) {
         composable<ChatRoute> {
-            ChatScreen(onOpenSettings = { /* wired once :feature:settings exists */ })
+            ChatScreen(onOpenSettings = { navController.navigate(SettingsRoute) })
         }
+        settingsGraph(navController)
     }
 }

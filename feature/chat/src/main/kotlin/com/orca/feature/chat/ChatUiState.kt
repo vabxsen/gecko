@@ -19,6 +19,7 @@ data class ChatUiState(
     val editingMessageId: String? = null,
     val errorMessage: String? = null,
     val sendOnEnter: Boolean = true,
+    val streamingEnabled: Boolean = true,
 ) {
     val currentConversation: Conversation?
         get() = conversations.find { it.id == currentConversationId }
