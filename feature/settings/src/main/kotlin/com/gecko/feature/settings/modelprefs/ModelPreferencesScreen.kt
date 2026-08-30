@@ -48,11 +48,11 @@ fun ModelPreferencesScreen(
 
         LazyColumn(modifier = Modifier.fillMaxSize().padding(innerPadding), contentPadding = SettingsContentPadding) {
             item { SettingsSectionHeader("Default provider") }
-            items(uiState.enabledProviders, key = { it.providerId }) { config ->
-                ProviderOptionRow(config, selected = config.providerId == uiState.defaultProviderId, onClick = { viewModel.selectDefaultProvider(config.providerId) })
+            items(uiState.enabledProviders, key = { it.id }) { config ->
+                ProviderOptionRow(config, selected = config.id == uiState.defaultProviderConfigId, onClick = { viewModel.selectDefaultProvider(config.id) })
             }
 
-            if (uiState.defaultProviderId != null) {
+            if (uiState.defaultProviderConfigId != null) {
                 item { HorizontalDivider() }
                 item { SettingsSectionHeader("Default model") }
                 if (uiState.modelsForDefaultProvider.isEmpty()) {
@@ -87,7 +87,8 @@ fun ModelPreferencesScreen(
 @Composable
 private fun ProviderOptionRow(config: ProviderConfig, selected: Boolean, onClick: () -> Unit) {
     SettingsRow(
-        title = config.providerId.displayName,
+        title = config.label.ifBlank { config.providerId.displayName },
+        subtitle = config.providerId.displayName,
         onClick = onClick,
         trailing = {
             Icon(

@@ -24,12 +24,14 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 data class ProviderDetailUiState(
-    val providerId: ProviderId,
+    val id: String,
     val config: ProviderConfig? = null,
     val availableModels: List<ModelInfo> = emptyList(),
     val isLoadingModels: Boolean = false,
     val isSavingKey: Boolean = false,
 ) {
+    val providerId: ProviderId? get() = config?.providerId
+    val label: String get() = config?.label.orEmpty()
     val enabled: Boolean get() = config?.enabled ?: false
     val hasApiKey: Boolean get() = config?.hasApiKey ?: false
     val connectionStatus: ConnectionStatus get() = config?.connectionStatus ?: ConnectionStatus.Untested
@@ -46,29 +48,34 @@ class ProviderDetailViewModel @Inject constructor(
     private val refreshProviderModelsUseCase: RefreshProviderModelsUseCase,
 ) : ViewModel() {
 
-    private val providerId: ProviderId = ProviderId.fromSlug(savedStateHandle.toRoute<ProviderDetailRoute>().providerSlug)
-        ?: ProviderId.OPENAI
+    private val id: String = savedStateHandle.toRoute<ProviderDetailRoute>().configId
 
     private val isLoadingModels = MutableStateFlow(false)
     private val isSavingKey = MutableStateFlow(false)
 
     val uiState: StateFlow<ProviderDetailUiState> = combine(
-        providerConfigRepository.observe(providerId),
-        providerConfigRepository.observeModels(providerId),
+        providerConfigRepository.observe(id),
+        providerConfigRepository.observeModels(id),
         isLoadingModels,
         isSavingKey,
     ) { config, models, loadingModels, savingKey ->
         ProviderDetailUiState(
-            providerId = providerId,
+            id = id,
             config = config,
             availableModels = models,
             isLoadingModels = loadingModels,
             isSavingKey = savingKey,
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProviderDetailUiState(providerId = providerId))
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProviderDetailUiState(id = id))
 
     fun setEnabled(enabled: Boolean) {
-        viewModelScope.launch { providerConfigRepository.setEnabled(providerId, enabled) }
+        viewModelScope.launch { providerConfigRepository.setEnabled(id, enabled) }
+    }
+
+    fun setLabel(label: String) {
+        val trimmed = label.trim()
+        if (trimmed.isEmpty()) return
+        viewModelScope.launch { providerConfigRepository.setLabel(id, trimmed) }
     }
 
     fun saveApiKey(key: String) {
@@ -76,35 +83,42 @@ class ProviderDetailViewModel @Inject constructor(
         if (trimmed.isEmpty()) return
         viewModelScope.launch {
             isSavingKey.value = true
-            saveProviderApiKeyUseCase(providerId, trimmed)
+            saveProviderApiKeyUseCase(id, trimmed)
             isSavingKey.value = false
         }
     }
 
     fun clearApiKey() {
         viewModelScope.launch {
-            secureKeyRepository.clearApiKey(providerId)
-            providerConfigRepository.setConnectionStatus(providerId, ConnectionStatus.Untested)
+            secureKeyRepository.clearApiKey(id)
+            providerConfigRepository.setConnectionStatus(id, ConnectionStatus.Untested)
         }
     }
 
     fun testConnection() {
-        viewModelScope.launch { testProviderConnectionUseCase(providerId) }
+        viewModelScope.launch { testProviderConnectionUseCase(id) }
     }
 
     fun refreshModels() {
         viewModelScope.launch {
             isLoadingModels.value = true
-            refreshProviderModelsUseCase(providerId)
+            refreshProviderModelsUseCase(id)
             isLoadingModels.value = false
         }
     }
 
     fun selectModel(modelId: String) {
-        viewModelScope.launch { providerConfigRepository.setSelectedModel(providerId, modelId) }
+        viewModelScope.launch { providerConfigRepository.setSelectedModel(id, modelId) }
     }
 
     fun setBaseUrlOverride(url: String?) {
-        viewModelScope.launch { providerConfigRepository.setBaseUrlOverride(providerId, url?.trim()?.ifBlank { null }) }
+        viewModelScope.launch { providerConfigRepository.setBaseUrlOverride(id, url?.trim()?.ifBlank { null }) }
+    }
+
+    fun deleteProvider(onDeleted: () -> Unit) {
+        viewModelScope.launch {
+            providerConfigRepository.removeProvider(id)
+            onDeleted()
+        }
     }
 }

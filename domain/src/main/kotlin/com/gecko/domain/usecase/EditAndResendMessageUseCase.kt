@@ -20,6 +20,7 @@ class EditAndResendMessageUseCase @Inject constructor(
         conversationId: String,
         messageId: String,
         newContent: String,
+        configId: String,
         providerId: ProviderId,
         modelId: String,
         streaming: Boolean,
@@ -32,6 +33,6 @@ class EditAndResendMessageUseCase @Inject constructor(
         conversationRepository.deleteMessagesAfter(conversationId, target.createdAt)
 
         val history = messages.takeWhile { it.id != messageId } + updated
-        return sendChatMessageUseCase(conversationId, providerId, modelId, history, streaming)
+        return sendChatMessageUseCase(conversationId, configId, providerId, modelId, history, streaming)
     }
 }

@@ -1,14 +1,14 @@
 package com.gecko.domain.repository
 
-import com.gecko.core.model.provider.ProviderId
-
 /**
  * Deliberately separate from [ProviderConfigRepository] so key material never rides along
  * on the observable, frequently-recomposed provider config [kotlinx.coroutines.flow.Flow].
+ * Keyed by the saved config's id, not the provider type — a provider type can have multiple
+ * saved keys.
  */
 interface SecureKeyRepository {
-    suspend fun saveApiKey(providerId: ProviderId, key: String)
-    suspend fun getApiKey(providerId: ProviderId): String?
-    suspend fun clearApiKey(providerId: ProviderId)
-    suspend fun hasApiKey(providerId: ProviderId): Boolean
+    suspend fun saveApiKey(id: String, key: String)
+    suspend fun getApiKey(id: String): String?
+    suspend fun clearApiKey(id: String)
+    suspend fun hasApiKey(id: String): Boolean
 }

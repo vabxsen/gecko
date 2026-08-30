@@ -25,6 +25,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,16 +53,56 @@ fun ProviderDetailScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var apiKeyInput by rememberSaveable { mutableStateOf("") }
     var keyVisible by rememberSaveable { mutableStateOf(false) }
+    var labelInput by rememberSaveable { mutableStateOf("") }
+    var labelInitialized by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(uiState.label) {
+        if (!labelInitialized && uiState.config != null) {
+            labelInput = uiState.label
+            labelInitialized = true
+        }
+    }
 
     Scaffold(
         modifier = modifier,
-        topBar = { SettingsTopBar(title = uiState.providerId.displayName, onBack = onBack) },
+        topBar = { SettingsTopBar(title = uiState.label.ifBlank { "API key" }, onBack = onBack) },
     ) { innerPadding ->
+        if (uiState.config == null) {
+            Text(
+                text = "This API key was removed.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(innerPadding).padding(20.dp),
+            )
+            return@Scaffold
+        }
+
         LazyColumn(modifier = Modifier.padding(innerPadding)) {
             item {
+                SettingsSectionHeader("Label")
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                ) {
+                    OutlinedTextField(
+                        value = labelInput,
+                        onValueChange = { labelInput = it },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                    )
+                    TextButton(
+                        onClick = { viewModel.setLabel(labelInput) },
+                        enabled = labelInput.isNotBlank() && labelInput != uiState.label,
+                        modifier = Modifier.padding(start = 8.dp),
+                    ) {
+                        Text("Save")
+                    }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(top = 12.dp))
                 SettingsSwitchRow(
                     title = "Enabled",
-                    subtitle = "Show this provider in the model selector",
+                    subtitle = "Show this key in the model selector",
                     checked = uiState.enabled,
                     onCheckedChange = viewModel::setEnabled,
                 )
@@ -70,7 +111,7 @@ fun ProviderDetailScreen(
                 Column(modifier = Modifier.padding(horizontal = 20.dp)) {
                     if (uiState.hasApiKey) {
                         Text(
-                            text = "A key is saved for this provider.",
+                            text = "A key is saved for this entry.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -142,6 +183,22 @@ fun ProviderDetailScreen(
             } else {
                 items(uiState.availableModels, key = { it.modelId }) { model ->
                     ModelRow(model = model, selected = model.modelId == uiState.selectedModelId, onClick = { viewModel.selectModel(model.modelId) })
+                }
+            }
+            item {
+                HorizontalDivider()
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    OutlinedButton(
+                        onClick = { viewModel.deleteProvider(onDeleted = onBack) },
+                        colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error,
+                        ),
+                    ) {
+                        Text("Delete this API key")
+                    }
                 }
             }
         }

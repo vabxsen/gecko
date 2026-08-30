@@ -16,6 +16,7 @@ class RegenerateResponseUseCase @Inject constructor(
 ) {
     suspend operator fun invoke(
         conversationId: String,
+        configId: String,
         providerId: ProviderId,
         modelId: String,
         streaming: Boolean,
@@ -28,6 +29,6 @@ class RegenerateResponseUseCase @Inject constructor(
         } else {
             messages
         }
-        return sendChatMessageUseCase(conversationId, providerId, modelId, history, streaming)
+        return sendChatMessageUseCase(conversationId, configId, providerId, modelId, history, streaming)
     }
 }

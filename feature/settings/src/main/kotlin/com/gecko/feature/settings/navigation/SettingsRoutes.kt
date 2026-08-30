@@ -15,7 +15,10 @@ object ChatPreferencesRoute
 object AiProvidersRoute
 
 @Serializable
-data class ProviderDetailRoute(val providerSlug: String)
+object AddProviderRoute
+
+@Serializable
+data class ProviderDetailRoute(val configId: String)
 
 @Serializable
 object ModelPreferencesRoute

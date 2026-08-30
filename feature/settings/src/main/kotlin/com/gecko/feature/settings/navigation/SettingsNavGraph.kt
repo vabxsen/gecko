@@ -9,6 +9,7 @@ import com.gecko.feature.settings.appearance.AppearanceScreen
 import com.gecko.feature.settings.chatprefs.ChatPreferencesScreen
 import com.gecko.feature.settings.modelprefs.ModelPreferencesScreen
 import com.gecko.feature.settings.privacy.DataPrivacyScreen
+import com.gecko.feature.settings.providers.AddProviderScreen
 import com.gecko.feature.settings.providers.AiProvidersScreen
 import com.gecko.feature.settings.providers.ProviderDetailScreen
 
@@ -33,8 +34,12 @@ fun NavGraphBuilder.settingsGraph(navController: NavController) {
     composable<AiProvidersRoute> {
         AiProvidersScreen(
             onBack = { navController.popBackStack() },
-            onOpenProvider = { slug -> navController.navigate(ProviderDetailRoute(slug)) },
+            onOpenProvider = { configId -> navController.navigate(ProviderDetailRoute(configId)) },
+            onAddProvider = { navController.navigate(AddProviderRoute) },
         )
+    }
+    composable<AddProviderRoute> {
+        AddProviderScreen(onBack = { navController.popBackStack() })
     }
     composable<ProviderDetailRoute> {
         ProviderDetailScreen(onBack = { navController.popBackStack() })

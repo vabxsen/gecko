@@ -42,7 +42,7 @@ class ChatViewModel @Inject constructor(
 
     private val currentConversationId = MutableStateFlow<String?>(null)
     private val searchQuery = MutableStateFlow("")
-    private val selectedProviderId = MutableStateFlow<ProviderId?>(null)
+    private val selectedConfigId = MutableStateFlow<String?>(null)
     private val selectedModelId = MutableStateFlow<String?>(null)
     private val editingMessageId = MutableStateFlow<String?>(null)
     private val errorMessage = MutableStateFlow<String?>(null)
@@ -60,14 +60,14 @@ class ChatViewModel @Inject constructor(
 
     private val providerConfigs = providerConfigRepository.observeAll()
 
-    private val availableModels = selectedProviderId.flatMapLatest { providerId ->
-        if (providerId == null) flowOf(emptyList()) else providerConfigRepository.observeModels(providerId)
+    private val availableModels = selectedConfigId.flatMapLatest { configId ->
+        if (configId == null) flowOf(emptyList()) else providerConfigRepository.observeModels(configId)
     }
 
     private data class ChatSection(val conversationId: String?, val messages: List<ChatMessage>, val generating: Boolean)
     private data class ProviderSection(
         val configs: List<com.gecko.core.model.provider.ProviderConfig>,
-        val providerId: ProviderId?,
+        val configId: String?,
         val modelId: String?,
         val models: List<com.gecko.core.model.provider.ModelInfo>,
     )
@@ -78,7 +78,7 @@ class ChatViewModel @Inject constructor(
     )
 
     private val chatSection = combine(currentConversationId, messages, isGenerating, ::ChatSection)
-    private val providerSection = combine(providerConfigs, selectedProviderId, selectedModelId, availableModels, ::ProviderSection)
+    private val providerSection = combine(providerConfigs, selectedConfigId, selectedModelId, availableModels, ::ProviderSection)
     private val miscSection = combine(conversations, editingMessageId, errorMessage, ::MiscSection)
 
     val uiState: StateFlow<ChatUiState> = combine(
@@ -94,7 +94,7 @@ class ChatViewModel @Inject constructor(
             isGenerating = chat.generating,
             searchQuery = searchQuery.value,
             providerConfigs = provider.configs,
-            selectedProviderId = provider.providerId,
+            selectedConfigId = provider.configId,
             selectedModelId = provider.modelId,
             availableModels = provider.models,
             editingMessageId = misc.editingId,
@@ -107,7 +107,7 @@ class ChatViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             val prefs = userPreferencesRepository.userPreferences.first()
-            selectedProviderId.value = prefs.defaultProviderId
+            selectedConfigId.value = prefs.defaultProviderConfigId
             selectedModelId.value = prefs.defaultModelId
         }
     }
@@ -127,10 +127,11 @@ class ChatViewModel @Inject constructor(
     fun sendMessage(text: String, attachmentImageBase64: String? = null) {
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return
-        val providerId = selectedProviderId.value ?: return
+        val configId = selectedConfigId.value ?: return
         val modelId = selectedModelId.value ?: return
 
         viewModelScope.launch {
+            val providerId = resolveProviderId(configId) ?: return@launch
             val conversationId = currentConversationId.value
                 ?: conversationRepository.createConversation(providerId, modelId).id.also { currentConversationId.value = it }
 
@@ -148,17 +149,26 @@ class ChatViewModel @Inject constructor(
             maybeAutoTitle(conversationId, history, trimmed)
 
             runGeneration {
-                sendChatMessageUseCase(conversationId, providerId, modelId, history + userMessage, streaming = uiState.value.streamingEnabled)
+                sendChatMessageUseCase(conversationId, configId, providerId, modelId, history + userMessage, streaming = uiState.value.streamingEnabled)
             }
         }
     }
 
     fun regenerate() {
         val conversationId = currentConversationId.value ?: return
-        val providerId = selectedProviderId.value ?: return
+        val configId = selectedConfigId.value ?: return
         val modelId = selectedModelId.value ?: return
-        runGeneration { regenerateResponseUseCase(conversationId, providerId, modelId, streaming = uiState.value.streamingEnabled) }
+        runGeneration {
+            val providerId = resolveProviderId(configId) ?: return@runGeneration flowOf(unresolvedProviderError())
+            regenerateResponseUseCase(conversationId, configId, providerId, modelId, streaming = uiState.value.streamingEnabled)
+        }
     }
+
+    private suspend fun resolveProviderId(configId: String): ProviderId? =
+        providerConfigs.first().find { it.id == configId }?.providerId
+
+    private fun unresolvedProviderError() =
+        ChatEvent.Error(message = "This API key was removed. Pick another one.", cause = null, isRetryable = false)
 
     fun stopGeneration() {
         generationJob?.cancel()
@@ -178,10 +188,13 @@ class ChatViewModel @Inject constructor(
         if (trimmed.isEmpty()) return
         val messageId = editingMessageId.value ?: return
         val conversationId = currentConversationId.value ?: return
-        val providerId = selectedProviderId.value ?: return
+        val configId = selectedConfigId.value ?: return
         val modelId = selectedModelId.value ?: return
         editingMessageId.value = null
-        runGeneration { editAndResendMessageUseCase(conversationId, messageId, trimmed, providerId, modelId, streaming = uiState.value.streamingEnabled) }
+        runGeneration {
+            val providerId = resolveProviderId(configId) ?: return@runGeneration flowOf(unresolvedProviderError())
+            editAndResendMessageUseCase(conversationId, messageId, trimmed, configId, providerId, modelId, streaming = uiState.value.streamingEnabled)
+        }
     }
 
     fun renameConversation(conversationId: String, title: String) {
@@ -205,8 +218,8 @@ class ChatViewModel @Inject constructor(
         searchQuery.value = query
     }
 
-    fun selectProvider(providerId: ProviderId) {
-        selectedProviderId.value = providerId
+    fun selectProviderConfig(configId: String) {
+        selectedConfigId.value = configId
         selectedModelId.value = null
     }
 

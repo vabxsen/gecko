@@ -30,7 +30,8 @@ internal fun ModelCatalogEntity.toDomain(): ModelInfo = ModelInfo(
     supportsImages = supportsImages,
 )
 
-internal fun ModelInfo.toEntity(): ModelCatalogEntity = ModelCatalogEntity(
+internal fun ModelInfo.toEntity(configId: String): ModelCatalogEntity = ModelCatalogEntity(
+    configId = configId,
     providerId = providerId.slug,
     modelId = modelId,
     displayName = displayName,

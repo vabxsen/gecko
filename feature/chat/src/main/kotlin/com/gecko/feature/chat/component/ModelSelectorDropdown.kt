@@ -24,23 +24,23 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.gecko.core.model.provider.ModelInfo
 import com.gecko.core.model.provider.ProviderConfig
-import com.gecko.core.model.provider.ProviderId
 
 @Composable
 fun ModelSelectorDropdown(
     enabledProviders: List<ProviderConfig>,
-    selectedProviderId: ProviderId?,
+    selectedConfigId: String?,
     selectedModelId: String?,
     modelsForSelectedProvider: List<ModelInfo>,
-    onSelectProvider: (ProviderId) -> Unit,
+    onSelectProviderConfig: (String) -> Unit,
     onSelectModel: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
     val hasSelection = selectedModelId != null
+    val selectedLabel = enabledProviders.find { it.id == selectedConfigId }?.label
     val label = when {
-        selectedProviderId == null -> "Select a model"
-        selectedModelId == null -> selectedProviderId.displayName
+        selectedConfigId == null -> "Select a model"
+        selectedModelId == null -> selectedLabel ?: "Select a model"
         else -> selectedModelId
     }
 
@@ -84,16 +84,16 @@ fun ModelSelectorDropdown(
         enabledProviders.forEachIndexed { index, provider ->
             if (index > 0) HorizontalDivider()
             Text(
-                text = provider.providerId.displayName,
+                text = provider.label.ifBlank { provider.providerId.displayName },
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
             )
-            if (provider.providerId != selectedProviderId) {
+            if (provider.id != selectedConfigId) {
                 DropdownMenuItem(
                     text = { Text("Tap to load models…") },
-                    onClick = { onSelectProvider(provider.providerId) },
+                    onClick = { onSelectProviderConfig(provider.id) },
                 )
             } else if (modelsForSelectedProvider.isEmpty()) {
                 DropdownMenuItem(text = { Text("No models loaded yet") }, onClick = {}, enabled = false)

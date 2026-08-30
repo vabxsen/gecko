@@ -1,14 +1,14 @@
 package com.gecko.core.security
 
-import com.gecko.core.model.provider.ProviderId
-
 /**
- * Encrypted, on-device storage for provider API keys. Implementations must never persist
- * plaintext keys, log key material, or surface it outside this interface.
+ * Encrypted, on-device storage for provider API keys, keyed by the caller-assigned config id
+ * (not the provider type — a single provider type can have multiple saved keys).
+ * Implementations must never persist plaintext keys, log key material, or surface it outside
+ * this interface.
  */
 interface SecureKeyStore {
-    suspend fun saveApiKey(providerId: ProviderId, key: String)
-    suspend fun getApiKey(providerId: ProviderId): String?
-    suspend fun clearApiKey(providerId: ProviderId)
-    suspend fun hasApiKey(providerId: ProviderId): Boolean
+    suspend fun saveApiKey(id: String, key: String)
+    suspend fun getApiKey(id: String): String?
+    suspend fun clearApiKey(id: String)
+    suspend fun hasApiKey(id: String): Boolean
 }

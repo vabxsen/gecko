@@ -8,15 +8,24 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ProviderConfigDao {
-    @Query("SELECT * FROM provider_configs")
+    @Query("SELECT * FROM provider_configs ORDER BY createdAt ASC")
     fun observeAll(): Flow<List<ProviderConfigEntity>>
 
-    @Query("SELECT * FROM provider_configs WHERE providerId = :providerId")
-    fun observeById(providerId: String): Flow<ProviderConfigEntity?>
+    @Query("SELECT * FROM provider_configs WHERE id = :id")
+    fun observeById(id: String): Flow<ProviderConfigEntity?>
 
-    @Query("SELECT * FROM provider_configs WHERE providerId = :providerId")
-    suspend fun getById(providerId: String): ProviderConfigEntity?
+    @Query("SELECT * FROM provider_configs WHERE id = :id")
+    suspend fun getById(id: String): ProviderConfigEntity?
+
+    @Query("SELECT COUNT(*) FROM provider_configs")
+    suspend fun count(): Int
 
     @Upsert
     suspend fun upsert(config: ProviderConfigEntity)
+
+    @Query("DELETE FROM provider_configs WHERE id = :id")
+    suspend fun deleteById(id: String)
+
+    @Query("DELETE FROM provider_configs")
+    suspend fun deleteAll()
 }

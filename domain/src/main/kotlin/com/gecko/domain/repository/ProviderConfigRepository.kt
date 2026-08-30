@@ -6,14 +6,25 @@ import com.gecko.core.model.provider.ProviderConfig
 import com.gecko.core.model.provider.ProviderId
 import kotlinx.coroutines.flow.Flow
 
+/** A user may save up to this many API key entries in total, across all provider types. */
+const val MAX_PROVIDER_CONFIGS = 10
+
 interface ProviderConfigRepository {
     fun observeAll(): Flow<List<ProviderConfig>>
-    fun observe(providerId: ProviderId): Flow<ProviderConfig>
-    suspend fun setEnabled(providerId: ProviderId, enabled: Boolean)
-    suspend fun setSelectedModel(providerId: ProviderId, modelId: String?)
-    suspend fun setBaseUrlOverride(providerId: ProviderId, baseUrl: String?)
-    suspend fun setConnectionStatus(providerId: ProviderId, status: ConnectionStatus)
+    fun observe(id: String): Flow<ProviderConfig?>
 
-    fun observeModels(providerId: ProviderId): Flow<List<ModelInfo>>
-    suspend fun saveModels(providerId: ProviderId, models: List<ModelInfo>)
+    /** Creates a new saved key entry. Fails if [MAX_PROVIDER_CONFIGS] is already reached. */
+    suspend fun addProvider(providerId: ProviderId, label: String): Result<String>
+    suspend fun removeProvider(id: String)
+    suspend fun setLabel(id: String, label: String)
+    suspend fun setEnabled(id: String, enabled: Boolean)
+    suspend fun setSelectedModel(id: String, modelId: String?)
+    suspend fun setBaseUrlOverride(id: String, baseUrl: String?)
+    suspend fun setConnectionStatus(id: String, status: ConnectionStatus)
+
+    fun observeModels(id: String): Flow<List<ModelInfo>>
+    suspend fun saveModels(id: String, models: List<ModelInfo>)
+
+    /** Wipes every saved key entry, its API key, and its cached model catalog. */
+    suspend fun clearAll()
 }

@@ -3,6 +3,8 @@ package com.gecko.feature.settings.providers
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -10,7 +12,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -18,16 +22,17 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.gecko.core.designsystem.theme.GeckoMotion
 import com.gecko.core.model.provider.ConnectionStatus
 import com.gecko.core.model.provider.ProviderConfig
+import com.gecko.domain.repository.MAX_PROVIDER_CONFIGS
 import com.gecko.feature.settings.component.SettingsContentPadding
 import com.gecko.feature.settings.component.SettingsRow
 import com.gecko.feature.settings.component.SettingsTopBar
@@ -36,25 +41,54 @@ import com.gecko.feature.settings.component.SettingsTopBar
 fun AiProvidersScreen(
     onBack: () -> Unit,
     onOpenProvider: (String) -> Unit,
+    onAddProvider: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: AiProvidersViewModel = hiltViewModel(),
 ) {
     val configs by viewModel.providerConfigs.collectAsStateWithLifecycle()
+    val canAddMore = configs.size < MAX_PROVIDER_CONFIGS
 
     Scaffold(
         modifier = modifier,
         topBar = { SettingsTopBar(title = "AI Providers", onBack = onBack) },
+        floatingActionButton = {
+            if (canAddMore) {
+                ExtendedFloatingActionButton(
+                    onClick = onAddProvider,
+                    icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                    text = { Text("Add API key") },
+                )
+            }
+        },
     ) { innerPadding ->
+        if (configs.isEmpty()) {
+            Text(
+                text = "No API keys yet. Add one to start chatting — bring your own key from OpenAI, Anthropic, Google, or OpenRouter.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(innerPadding).padding(20.dp),
+            )
+            return@Scaffold
+        }
+
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(innerPadding),
             contentPadding = SettingsContentPadding,
         ) {
-            items(configs, key = { it.providerId }) { config ->
+            items(configs, key = { it.id }) { config ->
                 ProviderRow(
                     config = config,
-                    onClick = { onOpenProvider(config.providerId.slug) },
-                    onToggleEnabled = { enabled -> viewModel.setEnabled(config.providerId, enabled) },
+                    onClick = { onOpenProvider(config.id) },
+                    onToggleEnabled = { enabled -> viewModel.setEnabled(config.id, enabled) },
                     modifier = Modifier.animateItem(),
+                )
+            }
+            item {
+                Text(
+                    text = "${configs.size} of $MAX_PROVIDER_CONFIGS API keys saved",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
                 )
             }
         }
@@ -69,13 +103,13 @@ private fun ProviderRow(
     modifier: Modifier = Modifier,
 ) {
     SettingsRow(
-        title = config.providerId.displayName,
-        subtitle = statusLabel(config),
+        title = config.label.ifBlank { config.providerId.displayName },
+        subtitle = "${config.providerId.displayName} · ${statusLabel(config)}",
         onClick = onClick,
         modifier = modifier,
         leading = { StatusDot(config.connectionStatus) },
         trailing = {
-            androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Switch(checked = config.enabled, onCheckedChange = onToggleEnabled)
                 Icon(
                     Icons.AutoMirrored.Filled.KeyboardArrowRight,
@@ -103,7 +137,7 @@ private fun StatusDot(status: ConnectionStatus) {
         animationSpec = tween(GeckoMotion.DURATION_STANDARD, easing = GeckoMotion.EasingStandard),
         label = "statusDotColor",
     )
-    androidx.compose.foundation.layout.Box(
+    Box(
         modifier = Modifier
             .size(10.dp)
             .clip(androidx.compose.foundation.shape.CircleShape)

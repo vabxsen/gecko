@@ -8,7 +8,6 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.preferencesDataStoreFile
 import com.gecko.core.model.preferences.ThemeMode
 import com.gecko.core.model.preferences.UserPreferences
-import com.gecko.core.model.provider.ProviderId
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -24,8 +23,7 @@ class UserPreferencesDataSource(
                 ?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() }
                 ?: ThemeMode.SYSTEM,
             dynamicColorEnabled = prefs[PreferencesKeys.DYNAMIC_COLOR_ENABLED] ?: false,
-            defaultProviderId = prefs[PreferencesKeys.DEFAULT_PROVIDER_ID]
-                ?.let { ProviderId.fromSlug(it) },
+            defaultProviderConfigId = prefs[PreferencesKeys.DEFAULT_PROVIDER_CONFIG_ID],
             defaultModelId = prefs[PreferencesKeys.DEFAULT_MODEL_ID],
             sendOnEnter = prefs[PreferencesKeys.SEND_ON_ENTER] ?: true,
             streamingEnabled = prefs[PreferencesKeys.STREAMING_ENABLED] ?: true,
@@ -42,12 +40,12 @@ class UserPreferencesDataSource(
         dataStore.edit { it[PreferencesKeys.DYNAMIC_COLOR_ENABLED] = enabled }
     }
 
-    suspend fun setDefaultProvider(providerId: ProviderId?) {
+    suspend fun setDefaultProviderConfig(configId: String?) {
         dataStore.edit {
-            if (providerId == null) {
-                it.remove(PreferencesKeys.DEFAULT_PROVIDER_ID)
+            if (configId == null) {
+                it.remove(PreferencesKeys.DEFAULT_PROVIDER_CONFIG_ID)
             } else {
-                it[PreferencesKeys.DEFAULT_PROVIDER_ID] = providerId.slug
+                it[PreferencesKeys.DEFAULT_PROVIDER_CONFIG_ID] = configId
             }
         }
     }

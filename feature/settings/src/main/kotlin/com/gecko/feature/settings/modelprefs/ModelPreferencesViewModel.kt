@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.gecko.core.model.provider.ModelInfo
 import com.gecko.core.model.provider.ProviderConfig
-import com.gecko.core.model.provider.ProviderId
 import com.gecko.domain.repository.ProviderConfigRepository
 import com.gecko.domain.repository.UserPreferencesRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -20,7 +19,7 @@ import kotlinx.coroutines.launch
 
 data class ModelPreferencesUiState(
     val enabledProviders: List<ProviderConfig> = emptyList(),
-    val defaultProviderId: ProviderId? = null,
+    val defaultProviderConfigId: String? = null,
     val defaultModelId: String? = null,
     val modelsForDefaultProvider: List<ModelInfo> = emptyList(),
 )
@@ -36,28 +35,28 @@ class ModelPreferencesViewModel @Inject constructor(
         .map { configs -> configs.filter { it.enabled && it.hasApiKey } }
 
     private val defaultSelection = userPreferencesRepository.userPreferences
-        .map { it.defaultProviderId to it.defaultModelId }
+        .map { it.defaultProviderConfigId to it.defaultModelId }
 
-    private val modelsForDefaultProvider = defaultSelection.flatMapLatest { (providerId, _) ->
-        if (providerId == null) flowOf(emptyList()) else providerConfigRepository.observeModels(providerId)
+    private val modelsForDefaultProvider = defaultSelection.flatMapLatest { (configId, _) ->
+        if (configId == null) flowOf(emptyList()) else providerConfigRepository.observeModels(configId)
     }
 
     val uiState: StateFlow<ModelPreferencesUiState> = combine(
         enabledProviders,
         defaultSelection,
         modelsForDefaultProvider,
-    ) { providers, (defaultProviderId, defaultModelId), models ->
+    ) { providers, (defaultProviderConfigId, defaultModelId), models ->
         ModelPreferencesUiState(
             enabledProviders = providers,
-            defaultProviderId = defaultProviderId,
+            defaultProviderConfigId = defaultProviderConfigId,
             defaultModelId = defaultModelId,
             modelsForDefaultProvider = models,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ModelPreferencesUiState())
 
-    fun selectDefaultProvider(providerId: ProviderId) {
+    fun selectDefaultProvider(configId: String) {
         viewModelScope.launch {
-            userPreferencesRepository.setDefaultProvider(providerId)
+            userPreferencesRepository.setDefaultProviderConfig(configId)
             userPreferencesRepository.setDefaultModel(null)
         }
     }

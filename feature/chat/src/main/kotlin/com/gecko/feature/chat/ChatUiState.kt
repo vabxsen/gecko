@@ -4,7 +4,6 @@ import com.gecko.core.model.chat.ChatMessage
 import com.gecko.core.model.conversation.Conversation
 import com.gecko.core.model.provider.ModelInfo
 import com.gecko.core.model.provider.ProviderConfig
-import com.gecko.core.model.provider.ProviderId
 
 data class ChatUiState(
     val conversations: List<Conversation> = emptyList(),
@@ -13,7 +12,7 @@ data class ChatUiState(
     val isGenerating: Boolean = false,
     val searchQuery: String = "",
     val providerConfigs: List<ProviderConfig> = emptyList(),
-    val selectedProviderId: ProviderId? = null,
+    val selectedConfigId: String? = null,
     val selectedModelId: String? = null,
     val availableModels: List<ModelInfo> = emptyList(),
     val editingMessageId: String? = null,
@@ -28,5 +27,5 @@ data class ChatUiState(
         get() = providerConfigs.filter { it.enabled && it.hasApiKey }
 
     val canSend: Boolean
-        get() = !isGenerating && selectedProviderId != null && selectedModelId != null
+        get() = !isGenerating && selectedConfigId != null && selectedModelId != null
 }

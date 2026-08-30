@@ -30,6 +30,7 @@ class SendChatMessageUseCase @Inject constructor(
 ) {
     suspend operator fun invoke(
         conversationId: String,
+        configId: String,
         providerId: ProviderId,
         modelId: String,
         history: List<ChatMessage>,
@@ -55,7 +56,7 @@ class SendChatMessageUseCase @Inject constructor(
         var usage: TokenUsage? = null
         var errorMessage: String? = null
 
-        return chatCompletionRepository.sendMessage(providerId, modelId, history, streaming)
+        return chatCompletionRepository.sendMessage(configId, modelId, history, streaming)
             .onEach { event ->
                 when (event) {
                     is ChatEvent.ContentDelta -> {

@@ -6,7 +6,6 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.security.keystore.StrongBoxUnavailableException
 import android.util.Base64
-import com.gecko.core.model.provider.ProviderId
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -30,17 +29,17 @@ class AndroidKeystoreSecureKeyStore(
     private val appContext = context.applicationContext
     private val keyStore: KeyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
 
-    override suspend fun saveApiKey(providerId: ProviderId, key: String) = withContext(dispatcher) {
+    override suspend fun saveApiKey(id: String, key: String) = withContext(dispatcher) {
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, getOrCreateSecretKey())
         val ciphertext = cipher.doFinal(key.toByteArray(Charsets.UTF_8))
         val combined = cipher.iv + ciphertext
         val encoded = Base64.encodeToString(combined, Base64.NO_WRAP)
-        prefs().edit().putString(prefsKey(providerId), encoded).apply()
+        prefs().edit().putString(prefsKey(id), encoded).apply()
     }
 
-    override suspend fun getApiKey(providerId: ProviderId): String? = withContext(dispatcher) {
-        val encoded = prefs().getString(prefsKey(providerId), null) ?: return@withContext null
+    override suspend fun getApiKey(id: String): String? = withContext(dispatcher) {
+        val encoded = prefs().getString(prefsKey(id), null) ?: return@withContext null
         val combined = Base64.decode(encoded, Base64.NO_WRAP)
         if (combined.size <= IV_LENGTH_BYTES) return@withContext null
         val iv = combined.copyOfRange(0, IV_LENGTH_BYTES)
@@ -50,17 +49,17 @@ class AndroidKeystoreSecureKeyStore(
         String(cipher.doFinal(ciphertext), Charsets.UTF_8)
     }
 
-    override suspend fun clearApiKey(providerId: ProviderId) = withContext(dispatcher) {
-        prefs().edit().remove(prefsKey(providerId)).apply()
+    override suspend fun clearApiKey(id: String) = withContext(dispatcher) {
+        prefs().edit().remove(prefsKey(id)).apply()
     }
 
-    override suspend fun hasApiKey(providerId: ProviderId): Boolean = withContext(dispatcher) {
-        prefs().contains(prefsKey(providerId))
+    override suspend fun hasApiKey(id: String): Boolean = withContext(dispatcher) {
+        prefs().contains(prefsKey(id))
     }
 
     private fun prefs() = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
-    private fun prefsKey(providerId: ProviderId) = "api_key_${providerId.slug}"
+    private fun prefsKey(id: String) = "api_key_$id"
 
     private fun getOrCreateSecretKey(): SecretKey {
         (keyStore.getKey(KEYSTORE_ALIAS, null) as? SecretKey)?.let { return it }
