@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 data class AddProviderUiState(
     val selectedProviderId: ProviderId? = null,
     val label: String = "",
+    val labelManuallyEdited: Boolean = false,
     val apiKey: String = "",
     val isSaving: Boolean = false,
     val errorMessage: String? = null,
@@ -36,14 +37,14 @@ class AddProviderViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 selectedProviderId = providerId,
-                label = it.label.ifBlank { providerId.displayName },
+                label = if (it.labelManuallyEdited) it.label else providerId.displayName,
                 errorMessage = null,
             )
         }
     }
 
     fun updateLabel(label: String) {
-        _uiState.update { it.copy(label = label) }
+        _uiState.update { it.copy(label = label, labelManuallyEdited = true) }
     }
 
     fun updateApiKey(key: String) {
