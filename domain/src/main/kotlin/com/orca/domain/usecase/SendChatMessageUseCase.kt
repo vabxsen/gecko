@@ -1,5 +1,7 @@
 package com.orca.domain.usecase
 
+import javax.inject.Inject
+
 import com.orca.core.common.util.newId
 import com.orca.core.model.chat.ChatEvent
 import com.orca.core.model.chat.ChatMessage
@@ -22,7 +24,7 @@ import kotlinx.coroutines.withContext
  * message is written immediately so it survives process death; the final content/status is
  * written once the stream completes, errors, or is cancelled ("stop generation").
  */
-class SendChatMessageUseCase(
+class SendChatMessageUseCase @Inject constructor(
     private val conversationRepository: ConversationRepository,
     private val chatCompletionRepository: ChatCompletionRepository,
 ) {
@@ -56,7 +58,23 @@ class SendChatMessageUseCase(
         return chatCompletionRepository.sendMessage(providerId, modelId, history, streaming)
             .onEach { event ->
                 when (event) {
-                    is ChatEvent.ContentDelta -> buffer.append(event.text)
+                    is ChatEvent.ContentDelta -> {
+                        buffer.append(event.text)
+                        // Persisted per-delta (not just at the end) so the UI's reactive
+                        // observeMessages() Flow shows tokens arriving in real time.
+                        conversationRepository.saveMessage(
+                            ChatMessage(
+                                id = assistantMessageId,
+                                conversationId = conversationId,
+                                role = MessageRole.ASSISTANT,
+                                content = buffer.toString(),
+                                createdAt = createdAt,
+                                status = MessageStatus.STREAMING,
+                                providerId = providerId,
+                                modelId = modelId,
+                            ),
+                        )
+                    }
                     is ChatEvent.Completed -> usage = event.usage
                     is ChatEvent.Error -> errorMessage = event.message
                     is ChatEvent.Started -> Unit

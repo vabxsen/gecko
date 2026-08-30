@@ -4,17 +4,19 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import com.orca.core.designsystem.theme.OrcaTheme
+import com.orca.core.model.preferences.ThemeMode
+import com.orca.feature.chat.ChatScreen
+import com.orca.feature.chat.navigation.ChatRoute
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -23,25 +25,31 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            OrcaTheme {
-                OrcaScaffoldPlaceholder()
-            }
+            OrcaApp()
         }
     }
 }
 
 @Composable
-private fun OrcaScaffoldPlaceholder() {
-    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Scaffold(containerColor = MaterialTheme.colorScheme.background) { innerPadding ->
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(text = "Orca", style = MaterialTheme.typography.displayMedium)
-            }
+private fun OrcaApp(appViewModel: OrcaAppViewModel = hiltViewModel()) {
+    val preferences by appViewModel.userPreferences.collectAsStateWithLifecycle()
+    val darkTheme = when (preferences.themeMode) {
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+    }
+
+    OrcaTheme(darkTheme = darkTheme, dynamicColor = preferences.dynamicColorEnabled) {
+        OrcaNavHost()
+    }
+}
+
+@Composable
+private fun OrcaNavHost() {
+    val navController = rememberNavController()
+    NavHost(navController = navController, startDestination = ChatRoute, modifier = Modifier) {
+        composable<ChatRoute> {
+            ChatScreen(onOpenSettings = { /* wired once :feature:settings exists */ })
         }
     }
 }

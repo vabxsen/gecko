@@ -21,7 +21,10 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun provideOrcaDatabase(@ApplicationContext context: Context): OrcaDatabase =
-        Room.databaseBuilder(context, OrcaDatabase::class.java, OrcaDatabase.DATABASE_NAME).build()
+        Room.databaseBuilder(context, OrcaDatabase::class.java, OrcaDatabase.DATABASE_NAME)
+            // Pre-1.0: no installed base to migrate. Revisit before shipping a real release.
+            .fallbackToDestructiveMigration(dropAllTables = true)
+            .build()
 
     @Provides
     fun provideConversationDao(database: OrcaDatabase): ConversationDao = database.conversationDao()

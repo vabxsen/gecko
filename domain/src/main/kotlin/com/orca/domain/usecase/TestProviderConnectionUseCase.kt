@@ -1,11 +1,13 @@
 package com.orca.domain.usecase
 
+import javax.inject.Inject
+
 import com.orca.core.model.provider.ConnectionStatus
 import com.orca.core.model.provider.ProviderId
 import com.orca.domain.repository.ChatCompletionRepository
 import com.orca.domain.repository.ProviderConfigRepository
 
-class TestProviderConnectionUseCase(
+class TestProviderConnectionUseCase @Inject constructor(
     private val chatCompletionRepository: ChatCompletionRepository,
     private val providerConfigRepository: ProviderConfigRepository,
 ) {

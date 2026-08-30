@@ -1,5 +1,7 @@
 package com.orca.domain.usecase
 
+import javax.inject.Inject
+
 import com.orca.core.model.chat.ChatEvent
 import com.orca.core.model.chat.MessageRole
 import com.orca.core.model.provider.ProviderId
@@ -8,7 +10,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 
 /** Discards the most recent assistant reply (if any) and asks for a new one. */
-class RegenerateResponseUseCase(
+class RegenerateResponseUseCase @Inject constructor(
     private val conversationRepository: ConversationRepository,
     private val sendChatMessageUseCase: SendChatMessageUseCase,
 ) {

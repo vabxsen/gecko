@@ -46,6 +46,7 @@ internal fun MessageEntity.toDomain(): ChatMessage = ChatMessage(
         if (prompt != null && completion != null && total != null) TokenUsage(prompt, completion, total) else null
     },
     errorMessage = errorMessage,
+    attachmentImageBase64 = attachmentImageBase64,
 )
 
 internal fun ChatMessage.toEntity(): MessageEntity = MessageEntity(
@@ -61,4 +62,5 @@ internal fun ChatMessage.toEntity(): MessageEntity = MessageEntity(
     completionTokens = tokenUsage?.completionTokens,
     totalTokens = tokenUsage?.totalTokens,
     errorMessage = errorMessage,
+    attachmentImageBase64 = attachmentImageBase64,
 )

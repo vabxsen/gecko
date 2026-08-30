@@ -1,5 +1,7 @@
 package com.orca.domain.usecase
 
+import javax.inject.Inject
+
 import com.orca.core.model.chat.ChatEvent
 import com.orca.core.model.provider.ProviderId
 import com.orca.domain.repository.ConversationRepository
@@ -10,7 +12,7 @@ import kotlinx.coroutines.flow.first
  * Edits a previously sent user message, truncates everything after it, and asks for a new
  * reply. This is a linear edit (like most third-party clients) rather than branching history.
  */
-class EditAndResendMessageUseCase(
+class EditAndResendMessageUseCase @Inject constructor(
     private val conversationRepository: ConversationRepository,
     private val sendChatMessageUseCase: SendChatMessageUseCase,
 ) {

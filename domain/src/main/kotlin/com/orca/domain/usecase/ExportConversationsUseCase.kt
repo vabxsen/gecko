@@ -1,12 +1,14 @@
 package com.orca.domain.usecase
 
+import javax.inject.Inject
+
 import com.orca.core.model.chat.MessageRole
 import com.orca.domain.repository.ConversationRepository
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.flow.first
 
 /** Renders every conversation as a single Markdown transcript, newest first. */
-class ExportConversationsUseCase(
+class ExportConversationsUseCase @Inject constructor(
     private val conversationRepository: ConversationRepository,
 ) {
     suspend operator fun invoke(): String {

@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 1,
-    "identityHash": "b4fc83cd46010907d8828daabb252073",
+    "identityHash": "c5ac3525be78deac912a9db2892a9f93",
     "entities": [
       {
         "tableName": "conversations",
@@ -58,7 +58,7 @@
       },
       {
         "tableName": "messages",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `conversationId` TEXT NOT NULL, `role` TEXT NOT NULL, `content` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `status` TEXT NOT NULL, `providerId` TEXT, `modelId` TEXT, `promptTokens` INTEGER, `completionTokens` INTEGER, `totalTokens` INTEGER, `errorMessage` TEXT, PRIMARY KEY(`id`), FOREIGN KEY(`conversationId`) REFERENCES `conversations`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `conversationId` TEXT NOT NULL, `role` TEXT NOT NULL, `content` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `status` TEXT NOT NULL, `providerId` TEXT, `modelId` TEXT, `promptTokens` INTEGER, `completionTokens` INTEGER, `totalTokens` INTEGER, `errorMessage` TEXT, `attachmentImageBase64` TEXT, PRIMARY KEY(`id`), FOREIGN KEY(`conversationId`) REFERENCES `conversations`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
           {
             "fieldPath": "id",
@@ -124,6 +124,11 @@
           {
             "fieldPath": "errorMessage",
             "columnName": "errorMessage",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "attachmentImageBase64",
+            "columnName": "attachmentImageBase64",
             "affinity": "TEXT"
           }
         ],
@@ -261,7 +266,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'b4fc83cd46010907d8828daabb252073')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'c5ac3525be78deac912a9db2892a9f93')"
     ]
   }
 }

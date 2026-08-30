@@ -22,6 +22,9 @@ androidxTestRunner = "1.7.0"
 androidxTestCore = "1.7.0"
 turbine = "1.2.1"
 robolectric = "4.16.1"
+markdownRenderer = "0.40.0"
+highlights = "1.1.0"
+javaxInject = "1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -72,6 +75,10 @@ androidx-test-core = { group = "androidx.test", name = "core", version.ref = "an
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espresso" }
 turbine = { group = "app.cash.turbine", name = "turbine", version.ref = "turbine" }
 robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
+markdown-renderer-m3 = { group = "com.mikepenz", name = "multiplatform-markdown-renderer-m3", version.ref = "markdownRenderer" }
+markdown-renderer-code = { group = "com.mikepenz", name = "multiplatform-markdown-renderer-code", version.ref = "markdownRenderer" }
+highlights = { group = "dev.snipme", name = "highlights", version.ref = "highlights" }
+javax-inject = { group = "javax.inject", name = "javax.inject", version.ref = "javaxInject" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

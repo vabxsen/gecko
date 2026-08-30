@@ -30,4 +30,5 @@ data class MessageEntity(
     val completionTokens: Int?,
     val totalTokens: Int?,
     val errorMessage: String?,
+    val attachmentImageBase64: String? = null,
 )
