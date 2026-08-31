@@ -15,7 +15,6 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
 
 data class ModelPreferencesUiState(
     val enabledProviders: List<ProviderConfig> = emptyList(),
@@ -53,15 +52,4 @@ class ModelPreferencesViewModel @Inject constructor(
             modelsForDefaultProvider = models,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ModelPreferencesUiState())
-
-    fun selectDefaultProvider(configId: String) {
-        viewModelScope.launch {
-            userPreferencesRepository.setDefaultProviderConfig(configId)
-            userPreferencesRepository.setDefaultModel(null)
-        }
-    }
-
-    fun selectDefaultModel(modelId: String) {
-        viewModelScope.launch { userPreferencesRepository.setDefaultModel(modelId) }
-    }
 }

@@ -21,7 +21,13 @@ object AddProviderRoute
 data class ProviderDetailRoute(val configId: String)
 
 @Serializable
+data class ProviderModelSelectionRoute(val configId: String)
+
+@Serializable
 object ModelPreferencesRoute
+
+@Serializable
+data class DefaultModelSelectionRoute(val configId: String)
 
 @Serializable
 object DataPrivacyRoute

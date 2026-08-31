@@ -38,28 +38,6 @@ class ModelPreferencesViewModelTest {
     }
 
     @Test
-    fun selectingDefaultProviderClearsPreviousDefaultModel() = runTest {
-        val providerConfigRepository = FakeProviderConfigRepository()
-        val userPreferencesRepository = FakeUserPreferencesRepository()
-        val viewModel = ModelPreferencesViewModel(providerConfigRepository, userPreferencesRepository)
-        backgroundScope.launch { viewModel.uiState.collect {} }
-        advanceUntilIdle()
-
-        val openAiConfigId = providerConfigRepository.addProvider(ProviderId.OPENAI, "OpenAI").getOrThrow()
-        val anthropicConfigId = providerConfigRepository.addProvider(ProviderId.ANTHROPIC, "Anthropic").getOrThrow()
-        userPreferencesRepository.setDefaultProviderConfig(openAiConfigId)
-        userPreferencesRepository.setDefaultModel("gpt-4o")
-        advanceUntilIdle()
-
-        viewModel.selectDefaultProvider(anthropicConfigId)
-        advanceUntilIdle()
-
-        val prefs = userPreferencesRepository.userPreferences.value
-        assertEquals(anthropicConfigId, prefs.defaultProviderConfigId)
-        assertEquals(null, prefs.defaultModelId)
-    }
-
-    @Test
     fun modelsForDefaultProviderAreObserved() = runTest {
         val providerConfigRepository = FakeProviderConfigRepository()
         val userPreferencesRepository = FakeUserPreferencesRepository()
@@ -76,10 +54,5 @@ class ModelPreferencesViewModelTest {
         advanceUntilIdle()
 
         assertEquals(1, viewModel.uiState.value.modelsForDefaultProvider.size)
-
-        viewModel.selectDefaultModel("gpt-4o")
-        advanceUntilIdle()
-
-        assertEquals("gpt-4o", userPreferencesRepository.userPreferences.value.defaultModelId)
     }
 }

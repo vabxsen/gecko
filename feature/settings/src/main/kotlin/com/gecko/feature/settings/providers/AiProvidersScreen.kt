@@ -3,6 +3,7 @@ package com.gecko.feature.settings.providers
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -90,14 +91,6 @@ fun AiProvidersScreen(
                     modifier = Modifier.animateItem(),
                 )
             }
-            item {
-                Text(
-                    text = "${configs.size} of $MAX_PROVIDER_CONFIGS API keys saved",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
-                )
-            }
         }
     }
 }
@@ -116,7 +109,7 @@ private fun ProviderRow(
         modifier = modifier,
         leading = { StatusDot(config.connectionStatus) },
         trailing = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Switch(checked = config.enabled, onCheckedChange = onToggleEnabled)
                 Icon(
                     Icons.AutoMirrored.Filled.KeyboardArrowRight,

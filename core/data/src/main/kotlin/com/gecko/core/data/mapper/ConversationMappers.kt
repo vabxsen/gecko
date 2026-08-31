@@ -47,6 +47,7 @@ internal fun MessageEntity.toDomain(): ChatMessage = ChatMessage(
     },
     errorMessage = errorMessage,
     attachmentImageBase64 = attachmentImageBase64,
+    generatedImageBase64 = generatedImageBase64,
 )
 
 internal fun ChatMessage.toEntity(): MessageEntity = MessageEntity(
@@ -63,4 +64,5 @@ internal fun ChatMessage.toEntity(): MessageEntity = MessageEntity(
     totalTokens = tokenUsage?.totalTokens,
     errorMessage = errorMessage,
     attachmentImageBase64 = attachmentImageBase64,
+    generatedImageBase64 = generatedImageBase64,
 )

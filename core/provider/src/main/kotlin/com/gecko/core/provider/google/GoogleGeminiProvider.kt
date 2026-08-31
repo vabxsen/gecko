@@ -50,6 +50,15 @@ class GoogleGeminiProvider(
         val requestBody = GeminiRequest(
             contents = contents,
             systemInstruction = systemPrompt?.let { GeminiSystemInstruction(listOf(GeminiPart(it))) },
+            // Only the dedicated image-output models (their ids all contain "image", e.g.
+            // gemini-2.5-flash-image) need this — sending it to a normal chat model risks the
+            // API rejecting a response modality that model doesn't support, so every other
+            // model's request stays exactly as it was before.
+            generationConfig = if (model.contains("image", ignoreCase = true)) {
+                GeminiGenerationConfig(responseModalities = listOf("TEXT", "IMAGE"))
+            } else {
+                null
+            },
         )
 
         val endpoint = if (stream) "streamGenerateContent" else "generateContent"
@@ -71,8 +80,9 @@ class GoogleGeminiProvider(
                 }.getOrNull() ?: return@collect
 
                 parsed.candidates.firstOrNull()?.let { candidate ->
-                    candidate.content.parts.firstOrNull()?.text?.let { text ->
-                        if (text.isNotEmpty()) emit(ChatEvent.ContentDelta(text))
+                    candidate.content.parts.forEach { part ->
+                        part.text?.takeIf { it.isNotEmpty() }?.let { emit(ChatEvent.ContentDelta(it)) }
+                        part.inlineData?.let { emit(ChatEvent.ImageDelta(base64 = it.data, mimeType = it.mimeType)) }
                     }
                     candidate.finishReason?.let { finishReason = it.toFinishReason() }
                 }
@@ -91,8 +101,9 @@ class GoogleGeminiProvider(
             }
             val parsed = ProviderJson.decodeFromString(GeminiGenerateContentResponse.serializer(), bodyText)
             val candidate = parsed.candidates.firstOrNull()
-            candidate?.content?.parts?.firstOrNull()?.text?.let { text ->
-                if (text.isNotEmpty()) emit(ChatEvent.ContentDelta(text))
+            candidate?.content?.parts?.forEach { part ->
+                part.text?.takeIf { it.isNotEmpty() }?.let { emit(ChatEvent.ContentDelta(it)) }
+                part.inlineData?.let { emit(ChatEvent.ImageDelta(base64 = it.data, mimeType = it.mimeType)) }
             }
             val usage = parsed.usageMetadata?.let { TokenUsage(it.promptTokenCount, it.candidatesTokenCount, it.totalTokenCount) }
             emit(ChatEvent.Completed(candidate?.finishReason?.toFinishReason() ?: FinishReason.STOP, usage))

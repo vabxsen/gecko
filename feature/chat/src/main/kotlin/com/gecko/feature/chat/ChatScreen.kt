@@ -2,11 +2,15 @@ package com.gecko.feature.chat
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.DrawerValue
@@ -133,7 +137,7 @@ fun ChatScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun ChatContent(
     uiState: ChatUiState,
@@ -143,6 +147,16 @@ private fun ChatContent(
     onOpenDrawer: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // 32dp of bottom margin is for comfortable thumb reach above the gesture/nav bar when the
+    // keyboard is closed. That same fixed margin left in place while the keyboard is open just
+    // shows as a dead strip of plain background color between the composer and the keyboard —
+    // drop it once the IME is up so the composer sits directly on the keyboard, no gap.
+    val imeVisible = WindowInsets.isImeVisible
+    val composerBottomPadding by animateDpAsState(
+        targetValue = if (imeVisible) 0.dp else 32.dp,
+        label = "composerBottomPadding",
+    )
+
     Scaffold(
         modifier = modifier,
         topBar = {
@@ -162,7 +176,7 @@ private fun ChatContent(
                 modifier = Modifier
                     .imePadding()
                     .padding(horizontal = 12.dp)
-                    .padding(top = 8.dp, bottom = 32.dp),
+                    .padding(top = 8.dp, bottom = composerBottomPadding),
             )
         },
     ) { innerPadding ->

@@ -1,12 +1,12 @@
 package com.gecko.feature.settings.providers
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
@@ -38,8 +38,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.gecko.core.model.provider.ConnectionStatus
-import com.gecko.core.model.provider.ModelInfo
-import com.gecko.feature.settings.component.SettingsRow
+import com.gecko.core.model.provider.ProviderId
+import com.gecko.feature.settings.component.ModelSelectorRow
 import com.gecko.feature.settings.component.SettingsSectionHeader
 import com.gecko.feature.settings.component.SettingsSwitchRow
 import com.gecko.feature.settings.component.SettingsTopBar
@@ -47,19 +47,37 @@ import com.gecko.feature.settings.component.SettingsTopBar
 @Composable
 fun ProviderDetailScreen(
     onBack: () -> Unit,
+    onOpenModelSelection: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: ProviderDetailViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var apiKeyInput by rememberSaveable { mutableStateOf("") }
-    var keyVisible by rememberSaveable { mutableStateOf(false) }
+    var apiKeyInitialized by rememberSaveable { mutableStateOf(false) }
+    var keyVisible by rememberSaveable { mutableStateOf(true) }
     var labelInput by rememberSaveable { mutableStateOf("") }
     var labelInitialized by rememberSaveable { mutableStateOf(false) }
+    var baseUrlInput by rememberSaveable { mutableStateOf("") }
+    var baseUrlInitialized by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(uiState.label) {
         if (!labelInitialized && uiState.config != null) {
             labelInput = uiState.label
             labelInitialized = true
+        }
+    }
+
+    LaunchedEffect(uiState.baseUrlOverride) {
+        if (!baseUrlInitialized && uiState.config != null) {
+            baseUrlInput = uiState.baseUrlOverride.orEmpty()
+            baseUrlInitialized = true
+        }
+    }
+
+    LaunchedEffect(uiState.isApiKeyLoaded) {
+        if (!apiKeyInitialized && uiState.isApiKeyLoaded) {
+            apiKeyInput = uiState.apiKeyValue.orEmpty()
+            apiKeyInitialized = true
         }
     }
 
@@ -109,24 +127,17 @@ fun ProviderDetailScreen(
                 HorizontalDivider()
                 SettingsSectionHeader("API key")
                 Column(modifier = Modifier.padding(horizontal = 20.dp)) {
-                    if (uiState.hasApiKey) {
-                        Text(
-                            text = "A key is saved for this entry.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
                     OutlinedTextField(
                         value = apiKeyInput,
                         onValueChange = { apiKeyInput = it },
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                        label = { Text(if (uiState.hasApiKey) "Replace API key" else "API key") },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("API key") },
                         singleLine = true,
                         visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
                         trailingIcon = {
                             IconButton(onClick = { keyVisible = !keyVisible }) {
                                 Icon(
-                                    imageVector = if (keyVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                                    imageVector = if (keyVisible) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff,
                                     contentDescription = if (keyVisible) "Hide key" else "Show key",
                                 )
                             }
@@ -134,13 +145,51 @@ fun ProviderDetailScreen(
                     )
                     Row(modifier = Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
-                            onClick = { viewModel.saveApiKey(apiKeyInput); apiKeyInput = "" },
-                            enabled = apiKeyInput.isNotBlank() && !uiState.isSavingKey,
+                            onClick = { viewModel.saveApiKey(apiKeyInput) },
+                            enabled = apiKeyInput.isNotBlank() && apiKeyInput != uiState.apiKeyValue && !uiState.isSavingKey,
                         ) {
                             Text(if (uiState.isSavingKey) "Saving…" else "Save")
                         }
                         if (uiState.hasApiKey) {
-                            OutlinedButton(onClick = viewModel::clearApiKey) { Text("Remove") }
+                            OutlinedButton(onClick = { viewModel.clearApiKey(); apiKeyInput = "" }) { Text("Remove") }
+                        }
+                    }
+                }
+                if (uiState.providerId == ProviderId.OPENAI) {
+                    HorizontalDivider()
+                    Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+                        OPENAI_COMPATIBLE_ENDPOINTS.forEach { endpoint ->
+                            val selected = endpoint.baseUrl.orEmpty() == baseUrlInput.trim()
+                            Row(
+                                modifier = Modifier.fillMaxWidth()
+                                    .clickable { baseUrlInput = endpoint.baseUrl.orEmpty() }
+                                    .padding(vertical = 6.dp),
+                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                            ) {
+                                Icon(
+                                    imageVector = if (selected) Icons.Filled.Check else Icons.Filled.RadioButtonUnchecked,
+                                    contentDescription = null,
+                                    tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(end = 12.dp),
+                                )
+                                Text(text = endpoint.label, style = MaterialTheme.typography.bodyLarge)
+                            }
+                        }
+                        OutlinedTextField(
+                            value = baseUrlInput,
+                            onValueChange = { baseUrlInput = it },
+                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                            label = { Text("Base URL") },
+                            placeholder = { Text("Leave blank for OpenAI itself") },
+                            singleLine = true,
+                        )
+                        Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End) {
+                            TextButton(
+                                onClick = { viewModel.setBaseUrlOverride(baseUrlInput) },
+                                enabled = baseUrlInput.trim() != uiState.baseUrlOverride.orEmpty(),
+                            ) {
+                                Text("Save")
+                            }
                         }
                     }
                 }
@@ -181,8 +230,11 @@ fun ProviderDetailScreen(
                     )
                 }
             } else {
-                items(uiState.availableModels, key = { it.modelId }) { model ->
-                    ModelRow(model = model, selected = model.modelId == uiState.selectedModelId, onClick = { viewModel.selectModel(model.modelId) })
+                item {
+                    ModelSelectorRow(
+                        selectedModelName = uiState.availableModels.find { it.modelId == uiState.selectedModelId }?.displayName,
+                        onClick = onOpenModelSelection,
+                    )
                 }
             }
             item {
@@ -214,27 +266,4 @@ private fun ConnectionStatusLabel(status: ConnectionStatus, modifier: Modifier =
         is ConnectionStatus.Failure -> status.message to MaterialTheme.colorScheme.error
     }
     Text(text = text, style = MaterialTheme.typography.bodyMedium, color = color, modifier = modifier)
-}
-
-@Composable
-private fun ModelRow(model: ModelInfo, selected: Boolean, onClick: () -> Unit) {
-    SettingsRow(
-        title = model.displayName,
-        subtitle = "${model.contextWindowTokens.formatContextWindow()} context" + if (model.supportsImages) " · vision" else "",
-        onClick = onClick,
-        trailing = {
-            Icon(
-                imageVector = if (selected) Icons.Filled.Check else Icons.Filled.RadioButtonUnchecked,
-                contentDescription = null,
-                tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        },
-    )
-}
-
-private fun Int.formatContextWindow(): String = when {
-    this <= 0 -> "Unknown"
-    this >= 1_000_000 -> "${this / 1_000_000}M"
-    this >= 1_000 -> "${this / 1_000}K"
-    else -> toString()
 }

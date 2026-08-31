@@ -29,6 +29,8 @@ data class ProviderDetailUiState(
     val availableModels: List<ModelInfo> = emptyList(),
     val isLoadingModels: Boolean = false,
     val isSavingKey: Boolean = false,
+    val apiKeyValue: String? = null,
+    val isApiKeyLoaded: Boolean = false,
 ) {
     val providerId: ProviderId? get() = config?.providerId
     val label: String get() = config?.label.orEmpty()
@@ -36,6 +38,7 @@ data class ProviderDetailUiState(
     val hasApiKey: Boolean get() = config?.hasApiKey ?: false
     val connectionStatus: ConnectionStatus get() = config?.connectionStatus ?: ConnectionStatus.Untested
     val selectedModelId: String? get() = config?.selectedModelId
+    val baseUrlOverride: String? get() = config?.baseUrlOverride
 }
 
 @HiltViewModel
@@ -53,18 +56,33 @@ class ProviderDetailViewModel @Inject constructor(
     private val isLoadingModels = MutableStateFlow(false)
     private val isSavingKey = MutableStateFlow(false)
 
+    // The stored key is fetched once up front (and refreshed in-place on save/clear) rather than
+    // exposed as a reactive Flow — SecureKeyStore is a one-shot suspend read, not observable.
+    private val apiKeyValue = MutableStateFlow<String?>(null)
+    private val isApiKeyLoaded = MutableStateFlow(false)
+
+    init {
+        viewModelScope.launch {
+            apiKeyValue.value = secureKeyRepository.getApiKey(id)
+            isApiKeyLoaded.value = true
+        }
+    }
+
     val uiState: StateFlow<ProviderDetailUiState> = combine(
         providerConfigRepository.observe(id),
         providerConfigRepository.observeModels(id),
         isLoadingModels,
         isSavingKey,
-    ) { config, models, loadingModels, savingKey ->
+        combine(apiKeyValue, isApiKeyLoaded, ::Pair),
+    ) { config, models, loadingModels, savingKey, (keyValue, keyLoaded) ->
         ProviderDetailUiState(
             id = id,
             config = config,
             availableModels = models,
             isLoadingModels = loadingModels,
             isSavingKey = savingKey,
+            apiKeyValue = keyValue,
+            isApiKeyLoaded = keyLoaded,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProviderDetailUiState(id = id))
 
@@ -84,6 +102,7 @@ class ProviderDetailViewModel @Inject constructor(
         viewModelScope.launch {
             isSavingKey.value = true
             saveProviderApiKeyUseCase(id, trimmed)
+            apiKeyValue.value = trimmed
             isSavingKey.value = false
         }
     }
@@ -92,6 +111,7 @@ class ProviderDetailViewModel @Inject constructor(
         viewModelScope.launch {
             secureKeyRepository.clearApiKey(id)
             providerConfigRepository.setConnectionStatus(id, ConnectionStatus.Untested)
+            apiKeyValue.value = null
         }
     }
 

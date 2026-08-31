@@ -48,6 +48,52 @@ class SendChatMessageUseCaseTest {
     }
 
     @Test
+    fun imageDeltaPersistsGeneratedImageEvenWithNoText() = runTest {
+        val conversationRepo = FakeConversationRepository()
+        val conversation = conversationRepo.createConversation(ProviderId.GOOGLE, "gemini-2.5-flash-image")
+        val chatRepo = FakeChatCompletionRepository(
+            flowBuilder = {
+                flow {
+                    emit(ChatEvent.Started())
+                    emit(ChatEvent.ImageDelta(base64 = "iVBORw0KGgo=", mimeType = "image/png"))
+                    emit(ChatEvent.Completed(FinishReason.STOP, null))
+                }
+            },
+        )
+        val useCase = SendChatMessageUseCase(conversationRepo, chatRepo)
+
+        useCase(conversation.id, "config-1", ProviderId.GOOGLE, "gemini-2.5-flash-image", emptyList(), streaming = true).collect { }
+
+        val assistant = conversationRepo.observeMessages(conversation.id).first().single { it.role == MessageRole.ASSISTANT }
+        assertEquals(MessageStatus.COMPLETE, assistant.status)
+        assertEquals("", assistant.content)
+        assertEquals("iVBORw0KGgo=", assistant.generatedImageBase64)
+    }
+
+    @Test
+    fun mixedTextAndImageDeltasPersistBoth() = runTest {
+        val conversationRepo = FakeConversationRepository()
+        val conversation = conversationRepo.createConversation(ProviderId.GOOGLE, "gemini-2.5-flash-image")
+        val chatRepo = FakeChatCompletionRepository(
+            flowBuilder = {
+                flow {
+                    emit(ChatEvent.Started())
+                    emit(ChatEvent.ContentDelta("Here you go:"))
+                    emit(ChatEvent.ImageDelta(base64 = "AAAA", mimeType = "image/png"))
+                    emit(ChatEvent.Completed(FinishReason.STOP, null))
+                }
+            },
+        )
+        val useCase = SendChatMessageUseCase(conversationRepo, chatRepo)
+
+        useCase(conversation.id, "config-1", ProviderId.GOOGLE, "gemini-2.5-flash-image", emptyList(), streaming = true).collect { }
+
+        val assistant = conversationRepo.observeMessages(conversation.id).first().single { it.role == MessageRole.ASSISTANT }
+        assertEquals("Here you go:", assistant.content)
+        assertEquals("AAAA", assistant.generatedImageBase64)
+    }
+
+    @Test
     fun errorEventPersistsErrorMessage() = runTest {
         val conversationRepo = FakeConversationRepository()
         val conversation = conversationRepo.createConversation(ProviderId.OPENAI, "gpt-4o")

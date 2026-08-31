@@ -49,19 +49,32 @@ fun AddProviderScreen(
         topBar = { SettingsTopBar(title = "Add API key", onBack = onBack) },
     ) { innerPadding ->
         LazyColumn(modifier = Modifier.padding(innerPadding)) {
-            item { SettingsSectionHeader("Provider") }
-            items(ProviderId.entries) { providerId ->
+            items(ADD_PROVIDER_OPTIONS) { option ->
+                val selected = option.providerId == uiState.selectedProviderId && option.baseUrl.orEmpty() == uiState.baseUrlOverride.trim()
                 SettingsRow(
-                    title = providerId.displayName,
-                    onClick = { viewModel.selectProviderType(providerId) },
+                    title = option.label,
+                    onClick = { viewModel.selectOption(option) },
                     trailing = {
                         Icon(
-                            imageVector = if (providerId == uiState.selectedProviderId) Icons.Filled.Check else Icons.Filled.RadioButtonUnchecked,
+                            imageVector = if (selected) Icons.Filled.Check else Icons.Filled.RadioButtonUnchecked,
                             contentDescription = null,
-                            tint = if (providerId == uiState.selectedProviderId) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     },
                 )
+            }
+
+            if (uiState.selectedProviderId == ProviderId.OPENAI) {
+                item {
+                    OutlinedTextField(
+                        value = uiState.baseUrlOverride,
+                        onValueChange = viewModel::updateBaseUrlOverride,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                        label = { Text("Base URL") },
+                        placeholder = { Text("Leave blank for OpenAI itself") },
+                        singleLine = true,
+                    )
+                }
             }
 
             item {

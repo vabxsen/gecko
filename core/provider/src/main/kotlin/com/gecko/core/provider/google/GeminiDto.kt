@@ -4,7 +4,15 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 internal data class GeminiPart(
-    val text: String,
+    val text: String? = null,
+    val inlineData: GeminiInlineData? = null,
+)
+
+/** Raw bytes for a non-text part — an AI-generated image, on image-output models. */
+@Serializable
+internal data class GeminiInlineData(
+    val mimeType: String,
+    val data: String,
 )
 
 @Serializable
@@ -19,9 +27,15 @@ internal data class GeminiSystemInstruction(
 )
 
 @Serializable
+internal data class GeminiGenerationConfig(
+    val responseModalities: List<String>? = null,
+)
+
+@Serializable
 internal data class GeminiRequest(
     val contents: List<GeminiContent>,
     val systemInstruction: GeminiSystemInstruction? = null,
+    val generationConfig: GeminiGenerationConfig? = null,
 )
 
 @Serializable

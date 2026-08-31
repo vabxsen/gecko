@@ -42,9 +42,24 @@ fun MessageList(
         }
     }
 
-    LaunchedEffect(messages.size, messages.lastOrNull()?.content, isGenerating) {
+    val lastMessageId = messages.lastOrNull()?.id
+    val lastMessageContent = messages.lastOrNull()?.content
+
+    // A genuinely new message appeared (sent, or a fresh assistant placeholder created) —
+    // smooth one-time scroll, only if the user was already near the bottom.
+    LaunchedEffect(lastMessageId) {
         if (messages.isNotEmpty() && isNearBottom) {
             listState.animateScrollToItem(messages.lastIndex)
+        }
+    }
+
+    // The same last message is growing (streaming). Re-pin with a plain, instant scrollToItem
+    // rather than animateScrollToItem: an instant jump can't be interrupted the way a
+    // multi-frame animation can, so restarting this on every streamed update causes no
+    // fighting — it just keeps re-snapping to the bottom as the bubble grows.
+    LaunchedEffect(lastMessageId, lastMessageContent) {
+        if (lastMessageId != null && isNearBottom) {
+            listState.scrollToItem(messages.lastIndex)
         }
     }
 

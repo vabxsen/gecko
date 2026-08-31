@@ -5,9 +5,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.RadioButtonUnchecked
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -21,12 +19,17 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.gecko.core.model.provider.ProviderConfig
 import com.gecko.feature.settings.component.SettingsContentPadding
 import com.gecko.feature.settings.component.SettingsRow
-import com.gecko.feature.settings.component.SettingsSectionHeader
 import com.gecko.feature.settings.component.SettingsTopBar
 
+/**
+ * One row per enabled provider — the row itself carries the ">" into that provider's model
+ * picker. There is no separate "default provider" step: picking a model there makes its
+ * provider the default too, so this screen doesn't need its own provider-only selection UI.
+ */
 @Composable
 fun ModelPreferencesScreen(
     onBack: () -> Unit,
+    onOpenModelSelection: (configId: String) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: ModelPreferencesViewModel = hiltViewModel(),
 ) {
@@ -46,55 +49,32 @@ fun ModelPreferencesScreen(
             return@Scaffold
         }
 
-        LazyColumn(modifier = Modifier.fillMaxSize().padding(innerPadding), contentPadding = SettingsContentPadding) {
-            item { SettingsSectionHeader("Default provider") }
-            items(uiState.enabledProviders, key = { it.id }) { config ->
-                ProviderOptionRow(config, selected = config.id == uiState.defaultProviderConfigId, onClick = { viewModel.selectDefaultProvider(config.id) })
-            }
+        val defaultModelName = uiState.modelsForDefaultProvider.find { it.modelId == uiState.defaultModelId }?.displayName
 
-            if (uiState.defaultProviderConfigId != null) {
-                item { HorizontalDivider() }
-                item { SettingsSectionHeader("Default model") }
-                if (uiState.modelsForDefaultProvider.isEmpty()) {
-                    item {
-                        Text(
-                            text = "No models loaded for this provider yet. Open it in AI Providers and tap Refresh.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-                        )
-                    }
-                } else {
-                    items(uiState.modelsForDefaultProvider, key = { it.modelId }) { model ->
-                        SettingsRow(
-                            title = model.displayName,
-                            onClick = { viewModel.selectDefaultModel(model.modelId) },
-                            trailing = {
-                                Icon(
-                                    imageVector = if (model.modelId == uiState.defaultModelId) Icons.Filled.Check else Icons.Filled.RadioButtonUnchecked,
-                                    contentDescription = null,
-                                    tint = if (model.modelId == uiState.defaultModelId) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            },
-                        )
-                    }
-                }
+        LazyColumn(modifier = Modifier.fillMaxSize().padding(innerPadding), contentPadding = SettingsContentPadding) {
+            items(uiState.enabledProviders, key = { it.id }) { config ->
+                val isDefault = config.id == uiState.defaultProviderConfigId
+                ProviderModelRow(
+                    config = config,
+                    subtitle = if (isDefault) defaultModelName ?: "Choose a model" else config.providerId.displayName,
+                    onClick = { onOpenModelSelection(config.id) },
+                )
             }
         }
     }
 }
 
 @Composable
-private fun ProviderOptionRow(config: ProviderConfig, selected: Boolean, onClick: () -> Unit) {
+private fun ProviderModelRow(config: ProviderConfig, subtitle: String, onClick: () -> Unit) {
     SettingsRow(
         title = config.label.ifBlank { config.providerId.displayName },
-        subtitle = config.providerId.displayName,
+        subtitle = subtitle,
         onClick = onClick,
         trailing = {
             Icon(
-                imageVector = if (selected) Icons.Filled.Check else Icons.Filled.RadioButtonUnchecked,
-                contentDescription = null,
-                tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = "Select model",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         },
     )

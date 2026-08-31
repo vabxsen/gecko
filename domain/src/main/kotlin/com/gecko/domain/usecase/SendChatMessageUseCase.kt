@@ -55,14 +55,45 @@ class SendChatMessageUseCase @Inject constructor(
         val buffer = StringBuilder()
         var usage: TokenUsage? = null
         var errorMessage: String? = null
+        var generatedImageBase64: String? = null
+        var lastPersistedAtMs = 0L
 
         return chatCompletionRepository.sendMessage(configId, modelId, history, streaming)
             .onEach { event ->
                 when (event) {
                     is ChatEvent.ContentDelta -> {
+                        val wasEmpty = buffer.isEmpty()
                         buffer.append(event.text)
-                        // Persisted per-delta (not just at the end) so the UI's reactive
-                        // observeMessages() Flow shows tokens arriving in real time.
+                        // Persisted so the UI's reactive observeMessages() Flow shows tokens
+                        // arriving in real time, but throttled: a DB write per token causes a
+                        // full Room re-query + list recomposition + markdown re-parse of the
+                        // whole (growing) message on every single token, which gets visibly
+                        // slow on longer replies. The first delta always flushes immediately
+                        // so the reply doesn't feel delayed; onCompletion always flushes the
+                        // final content regardless of this throttle.
+                        val now = System.currentTimeMillis()
+                        if (wasEmpty || now - lastPersistedAtMs >= STREAM_PERSIST_INTERVAL_MS) {
+                            lastPersistedAtMs = now
+                            conversationRepository.saveMessage(
+                                ChatMessage(
+                                    id = assistantMessageId,
+                                    conversationId = conversationId,
+                                    role = MessageRole.ASSISTANT,
+                                    content = buffer.toString(),
+                                    createdAt = createdAt,
+                                    status = MessageStatus.STREAMING,
+                                    providerId = providerId,
+                                    modelId = modelId,
+                                    generatedImageBase64 = generatedImageBase64,
+                                ),
+                            )
+                        }
+                    }
+                    is ChatEvent.ImageDelta -> {
+                        // Arrives as one whole chunk, not token-by-token, and a response can be
+                        // image-only with no text at all — flush immediately rather than waiting
+                        // on the text throttle window above.
+                        generatedImageBase64 = event.base64
                         conversationRepository.saveMessage(
                             ChatMessage(
                                 id = assistantMessageId,
@@ -73,6 +104,7 @@ class SendChatMessageUseCase @Inject constructor(
                                 status = MessageStatus.STREAMING,
                                 providerId = providerId,
                                 modelId = modelId,
+                                generatedImageBase64 = generatedImageBase64,
                             ),
                         )
                     }
@@ -100,10 +132,15 @@ class SendChatMessageUseCase @Inject constructor(
                             modelId = modelId,
                             tokenUsage = usage,
                             errorMessage = errorMessage ?: cause?.takeIf { it !is CancellationException }?.message,
+                            generatedImageBase64 = generatedImageBase64,
                         ),
                     )
                     conversationRepository.touchConversation(conversationId)
                 }
             }
+    }
+
+    private companion object {
+        const val STREAM_PERSIST_INTERVAL_MS = 120L
     }
 }

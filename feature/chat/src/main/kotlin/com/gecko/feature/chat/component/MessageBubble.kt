@@ -154,10 +154,11 @@ private fun AssistantMessage(
                     )
                 }
             }
-            message.content.isEmpty() && message.status == MessageStatus.STREAMING -> {
+            message.content.isEmpty() && message.generatedImageBase64 == null && message.status == MessageStatus.STREAMING -> {
                 ThinkingIndicator()
             }
             else -> {
+                message.generatedImageBase64?.let { AttachedImage(it) }
                 GeckoMarkdown(content = message.content)
                 if (message.status == MessageStatus.STOPPED) {
                     Text(

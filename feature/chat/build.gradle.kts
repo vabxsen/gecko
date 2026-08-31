@@ -38,6 +38,14 @@ kotlin {
     }
 }
 
+composeCompiler {
+    // ChatMessage carries a java.time.Instant field; the compiler has no source access to that
+    // JDK type and infers it (and thus ChatMessage) unstable, which disables recomposition
+    // skipping for every message row during streaming. Instant is genuinely immutable, so this
+    // just corrects the compiler's default inference rather than overriding real behavior.
+    stabilityConfigurationFiles.add(layout.projectDirectory.file("compose_compiler_config.conf"))
+}
+
 dependencies {
     implementation(project(":domain"))
     implementation(project(":core:model"))
