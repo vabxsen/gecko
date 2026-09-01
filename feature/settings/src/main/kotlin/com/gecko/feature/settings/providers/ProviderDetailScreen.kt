@@ -37,6 +37,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.gecko.core.designsystem.icon.ProviderLogo
 import com.gecko.core.model.provider.ConnectionStatus
 import com.gecko.core.model.provider.ProviderId
 import com.gecko.feature.settings.component.ModelSelectorRow
@@ -97,6 +98,29 @@ fun ProviderDetailScreen(
 
         LazyColumn(modifier = Modifier.padding(innerPadding)) {
             item {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    ProviderLogo(
+                        providerId = uiState.config!!.providerId,
+                        baseUrlOverride = uiState.baseUrlOverride,
+                        size = 44.dp,
+                    )
+                    Column {
+                        Text(
+                            text = uiState.label.ifBlank { uiState.config!!.providerId.displayName },
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                        )
+                        Text(
+                            text = uiState.config!!.providerId.displayName,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
                 SettingsSectionHeader("Label")
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),

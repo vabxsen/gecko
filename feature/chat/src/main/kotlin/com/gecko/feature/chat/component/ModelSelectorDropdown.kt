@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material3.DropdownMenu
@@ -20,10 +22,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.gecko.core.designsystem.icon.providerLogoRes
 import com.gecko.core.model.provider.ModelInfo
 import com.gecko.core.model.provider.ProviderConfig
+import com.gecko.domain.model.curatedForSelection
 
 @Composable
 fun ModelSelectorDropdown(
@@ -36,8 +42,10 @@ fun ModelSelectorDropdown(
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    var showAllModels by remember { mutableStateOf(false) }
     val hasSelection = selectedModelId != null
-    val selectedLabel = enabledProviders.find { it.id == selectedConfigId }?.label
+    val selectedProvider = enabledProviders.find { it.id == selectedConfigId }
+    val selectedLabel = selectedProvider?.label
     val label = when {
         selectedConfigId == null -> "Select a model"
         selectedModelId == null -> selectedLabel ?: "Select a model"
@@ -54,12 +62,20 @@ fun ModelSelectorDropdown(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
         ) {
-            Icon(
-                imageVector = Icons.Outlined.AutoAwesome,
-                contentDescription = null,
-                tint = if (hasSelection) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(16.dp),
-            )
+            if (selectedProvider != null) {
+                Image(
+                    painter = painterResource(id = providerLogoRes(selectedProvider.providerId, selectedProvider.baseUrlOverride)),
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Outlined.AutoAwesome,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelLarge,
@@ -83,13 +99,23 @@ fun ModelSelectorDropdown(
         }
         enabledProviders.forEachIndexed { index, provider ->
             if (index > 0) HorizontalDivider()
-            Text(
-                text = provider.label.ifBlank { provider.providerId.displayName },
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.primary,
+            Row(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-            )
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+            ) {
+                Image(
+                    painter = painterResource(id = providerLogoRes(provider.providerId, provider.baseUrlOverride)),
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp),
+                )
+                Text(
+                    text = provider.label.ifBlank { provider.providerId.displayName },
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(start = 8.dp),
+                )
+            }
             if (provider.id != selectedConfigId) {
                 DropdownMenuItem(
                     text = { Text("Tap to load models…") },
@@ -98,7 +124,8 @@ fun ModelSelectorDropdown(
             } else if (modelsForSelectedProvider.isEmpty()) {
                 DropdownMenuItem(text = { Text("No models loaded yet") }, onClick = {}, enabled = false)
             } else {
-                modelsForSelectedProvider.forEach { model ->
+                val curated = modelsForSelectedProvider.curatedForSelection(provider.providerId)
+                curated.primary.forEach { model ->
                     DropdownMenuItem(
                         text = { Text(model.displayName) },
                         onClick = {
@@ -106,6 +133,29 @@ fun ModelSelectorDropdown(
                             expanded = false
                         },
                     )
+                }
+                if (curated.hasMore) {
+                    DropdownMenuItem(
+                        text = { Text(if (showAllModels) "Show fewer models" else "Show all ${curated.remainder.size} models") },
+                        trailingIcon = {
+                            Icon(
+                                imageVector = if (showAllModels) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                                contentDescription = null,
+                            )
+                        },
+                        onClick = { showAllModels = !showAllModels },
+                    )
+                    if (showAllModels) {
+                        curated.remainder.forEach { model ->
+                            DropdownMenuItem(
+                                text = { Text(model.displayName) },
+                                onClick = {
+                                    onSelectModel(model.modelId)
+                                    expanded = false
+                                },
+                            )
+                        }
+                    }
                 }
             }
         }

@@ -30,6 +30,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.gecko.core.designsystem.icon.ProviderLogo
 import com.gecko.core.model.provider.ProviderId
 import com.gecko.feature.settings.component.SettingsRow
 import com.gecko.feature.settings.component.SettingsSectionHeader
@@ -54,6 +55,7 @@ fun AddProviderScreen(
                 SettingsRow(
                     title = option.label,
                     onClick = { viewModel.selectOption(option) },
+                    leading = { ProviderLogo(providerId = option.providerId, baseUrlOverride = option.baseUrl) },
                     trailing = {
                         Icon(
                             imageVector = if (selected) Icons.Filled.Check else Icons.Filled.RadioButtonUnchecked,

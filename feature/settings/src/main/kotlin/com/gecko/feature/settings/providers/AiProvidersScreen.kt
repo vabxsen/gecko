@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -31,6 +32,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.gecko.core.designsystem.icon.ProviderLogo
 import com.gecko.core.designsystem.theme.GeckoMotion
 import com.gecko.core.model.provider.ConnectionStatus
 import com.gecko.core.model.provider.ProviderConfig
@@ -107,7 +109,15 @@ private fun ProviderRow(
         subtitle = "${config.providerId.displayName} · ${statusLabel(config)}",
         onClick = onClick,
         modifier = modifier,
-        leading = { StatusDot(config.connectionStatus) },
+        leading = {
+            Box {
+                ProviderLogo(providerId = config.providerId, baseUrlOverride = config.baseUrlOverride)
+                StatusDot(
+                    status = config.connectionStatus,
+                    modifier = Modifier.align(Alignment.BottomEnd).offset(x = 2.dp, y = 2.dp),
+                )
+            }
+        },
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Switch(checked = config.enabled, onCheckedChange = onToggleEnabled)
@@ -122,9 +132,9 @@ private fun ProviderRow(
 }
 
 @Composable
-private fun StatusDot(status: ConnectionStatus) {
+private fun StatusDot(status: ConnectionStatus, modifier: Modifier = Modifier) {
     if (status is ConnectionStatus.Testing) {
-        CircularProgressIndicator(modifier = Modifier.size(10.dp), strokeWidth = 1.5.dp)
+        CircularProgressIndicator(modifier = modifier.size(10.dp), strokeWidth = 1.5.dp)
         return
     }
     val targetColor = when (status) {
@@ -138,8 +148,11 @@ private fun StatusDot(status: ConnectionStatus) {
         label = "statusDotColor",
     )
     Box(
-        modifier = Modifier
+        modifier = modifier
             .size(10.dp)
+            .clip(androidx.compose.foundation.shape.CircleShape)
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(1.5.dp)
             .clip(androidx.compose.foundation.shape.CircleShape)
             .background(color),
     )
