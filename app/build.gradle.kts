@@ -24,7 +24,7 @@ val keystoreProperties = Properties().apply {
 // so it's derived from versionName instead of hand-incremented — every "major.minor[.patch]"
 // bump automatically produces a higher versionCode, which is what lets the in-app updater's
 // installed APK cleanly replace the previous one instead of risking a rejected/downgrade install.
-val appVersionName = "1.0.4"
+val appVersionName = "1.0.5"
 fun versionCodeFor(versionName: String): Int {
     val parts = versionName.split(".").map { it.toIntOrNull() ?: 0 }
     val major = parts.getOrElse(0) { 0 }
