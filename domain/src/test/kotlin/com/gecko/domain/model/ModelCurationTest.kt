@@ -100,7 +100,19 @@ class ModelCurationTest {
     }
 
     @Test
-    fun doesNotCurateNonGoogleProviders() {
+    fun doesNotCurateProvidersOutsideGoogleAndOpenAiProtocol() {
+        val models = listOf("gpt-4o", "gpt-4o-mini", "o1-preview").map {
+            ModelInfo(ProviderId.OPENROUTER, it, it, 128_000, true, true)
+        }
+
+        val curated = models.curatedForSelection(ProviderId.OPENROUTER)
+
+        assertEquals(models, curated.primary)
+        assertEquals(true, curated.remainder.isEmpty())
+    }
+
+    @Test
+    fun keepsPlainChatModelIdsForOpenAiProtocolProviders() {
         val models = listOf("gpt-4o", "gpt-4o-mini", "o1-preview").map {
             ModelInfo(ProviderId.OPENAI, it, it, 128_000, true, true)
         }
@@ -109,5 +121,31 @@ class ModelCurationTest {
 
         assertEquals(models, curated.primary)
         assertEquals(true, curated.remainder.isEmpty())
+    }
+
+    @Test
+    fun filtersOutNonChatModelsForOpenAiProtocolProviders() {
+        val chatIds = listOf("gpt-4o", "nvidia/llama-3.1-nemotron-70b-instruct", "deepseek-chat")
+        val nonChatIds = listOf(
+            "text-embedding-3-small",
+            "nvidia/nv-rerankqa-mistral-4b-v3",
+            "whisper-1",
+            "tts-1",
+            "nvidia/parakeet-tts",
+            "omni-moderation-latest",
+            "meta/llama-guard-3-8b",
+            "text-moderation-safety",
+            "clip-vit-large",
+            "text-ada-001",
+            "davinci-instruct-beta",
+            "dall-e-3",
+        )
+        val models = (chatIds + nonChatIds).map { ModelInfo(ProviderId.OPENAI, it, it, 128_000, true, true) }
+
+        val curated = models.curatedForSelection(ProviderId.OPENAI)
+
+        assertEquals(chatIds.toSet(), curated.primary.map { it.modelId }.toSet())
+        assertEquals(nonChatIds.toSet(), curated.remainder.map { it.modelId }.toSet())
+        assertEquals(true, curated.hasMore)
     }
 }

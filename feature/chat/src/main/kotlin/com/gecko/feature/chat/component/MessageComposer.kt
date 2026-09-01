@@ -19,6 +19,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -176,36 +177,38 @@ fun MessageComposer(
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(
-                    onClick = { pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-                    enabled = !isEncodingAttachment,
+                Box(
+                    modifier = Modifier
+                        .padding(start = 2.dp)
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary, CircleShape)
+                        .clickable(enabled = !isEncodingAttachment) {
+                            pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                        },
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(38.dp)
-                            .background(MaterialTheme.colorScheme.primary, CircleShape),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        if (isEncodingAttachment) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.onPrimary,
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Filled.Add,
-                                contentDescription = "Add attachment",
-                                tint = MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.size(20.dp),
-                            )
-                        }
+                    if (isEncodingAttachment) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Filled.Add,
+                            contentDescription = "Add attachment",
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(20.dp),
+                        )
                     }
                 }
                 TextField(
                     value = text,
                     onValueChange = { text = it },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .offset(x = (-10).dp),
                     placeholder = { Text("What's up…") },
                     maxLines = 6,
                     keyboardOptions = KeyboardOptions(imeAction = if (sendOnEnter) ImeAction.Send else ImeAction.Default),

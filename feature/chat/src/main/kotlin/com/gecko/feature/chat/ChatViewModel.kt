@@ -127,8 +127,12 @@ class ChatViewModel @Inject constructor(
     fun sendMessage(text: String, attachmentImageBase64: String? = null) {
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return
-        val configId = selectedConfigId.value ?: return
-        val modelId = selectedModelId.value ?: return
+        val configId = selectedConfigId.value
+        val modelId = selectedModelId.value
+        if (configId == null || modelId == null) {
+            errorMessage.value = "Pick an AI provider and model first — tap the model name above, or go to Settings → Model preferences."
+            return
+        }
 
         viewModelScope.launch {
             val providerId = resolveProviderId(configId) ?: return@launch

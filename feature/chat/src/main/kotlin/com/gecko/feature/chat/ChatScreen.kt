@@ -39,6 +39,7 @@ import com.gecko.feature.chat.component.ConversationDrawerContent
 import com.gecko.feature.chat.component.EmptyChatState
 import com.gecko.feature.chat.component.MessageComposer
 import com.gecko.feature.chat.component.MessageList
+import com.gecko.feature.chat.component.ModelSelectorDropdown
 import kotlinx.coroutines.launch
 
 /** Screens at least this wide get a permanent side rail instead of a swipe-away drawer. */
@@ -148,12 +149,11 @@ private fun ChatContent(
     modifier: Modifier = Modifier,
 ) {
     // 32dp of bottom margin is for comfortable thumb reach above the gesture/nav bar when the
-    // keyboard is closed. That same fixed margin left in place while the keyboard is open just
-    // shows as a dead strip of plain background color between the composer and the keyboard —
-    // drop it once the IME is up so the composer sits directly on the keyboard, no gap.
+    // keyboard is closed. That full margin isn't needed once the keyboard is up, but the composer
+    // still needs a little breathing room above the keyboard rather than sitting flush on it.
     val imeVisible = WindowInsets.isImeVisible
     val composerBottomPadding by animateDpAsState(
-        targetValue = if (imeVisible) 0.dp else 32.dp,
+        targetValue = if (imeVisible) 12.dp else 32.dp,
         label = "composerBottomPadding",
     )
 
@@ -164,6 +164,16 @@ private fun ChatContent(
                 title = uiState.currentConversation?.title ?: "New chat",
                 showMenuButton = showMenuButton,
                 onOpenDrawer = onOpenDrawer,
+                modelSelector = {
+                    ModelSelectorDropdown(
+                        enabledProviders = uiState.enabledProviders,
+                        selectedConfigId = uiState.selectedConfigId,
+                        selectedModelId = uiState.selectedModelId,
+                        modelsForSelectedProvider = uiState.availableModels,
+                        onSelectProviderConfig = viewModel::selectProviderConfig,
+                        onSelectModel = viewModel::selectModel,
+                    )
+                },
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },

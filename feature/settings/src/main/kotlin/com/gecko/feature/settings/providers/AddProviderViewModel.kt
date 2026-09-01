@@ -3,13 +3,18 @@ package com.gecko.feature.settings.providers
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.gecko.core.model.provider.ProviderId
+import com.gecko.domain.model.curatedForSelection
 import com.gecko.domain.repository.ProviderConfigRepository
+import com.gecko.domain.repository.UserPreferencesRepository
+import com.gecko.domain.usecase.RefreshProviderModelsUseCase
 import com.gecko.domain.usecase.SaveProviderApiKeyUseCase
+import com.gecko.domain.usecase.TestProviderConnectionUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -37,7 +42,10 @@ data class AddProviderUiState(
 @HiltViewModel
 class AddProviderViewModel @Inject constructor(
     private val providerConfigRepository: ProviderConfigRepository,
+    private val userPreferencesRepository: UserPreferencesRepository,
     private val saveProviderApiKeyUseCase: SaveProviderApiKeyUseCase,
+    private val testProviderConnectionUseCase: TestProviderConnectionUseCase,
+    private val refreshProviderModelsUseCase: RefreshProviderModelsUseCase,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AddProviderUiState())
@@ -81,12 +89,40 @@ class AddProviderViewModel @Inject constructor(
                         providerConfigRepository.setBaseUrlOverride(id, state.baseUrlOverride.trim().ifBlank { null })
                     }
                     saveProviderApiKeyUseCase(id, key)
-                    _uiState.update { it.copy(isSaving = false) }
-                    onSaved()
+
+                    testProviderConnectionUseCase(id)
+                        .onSuccess {
+                            val models = refreshProviderModelsUseCase(id).getOrDefault(emptyList())
+                            maybeAdoptAsDefault(id, providerId, models)
+                            _uiState.update { it.copy(isSaving = false) }
+                            onSaved()
+                        }
+                        .onFailure { e ->
+                            providerConfigRepository.removeProvider(id)
+                            _uiState.update {
+                                it.copy(isSaving = false, errorMessage = e.message ?: "Couldn't connect with this key")
+                            }
+                        }
                 }
                 .onFailure { e ->
                     _uiState.update { it.copy(isSaving = false, errorMessage = e.message ?: "Couldn't save this key") }
                 }
         }
+    }
+
+    /** The first key a user ever adds should just work in chat with no separate trip to Settings
+     * — but never override a default the user already chose explicitly. */
+    private suspend fun maybeAdoptAsDefault(
+        configId: String,
+        providerId: ProviderId,
+        models: List<com.gecko.core.model.provider.ModelInfo>,
+    ) {
+        val hasDefault = userPreferencesRepository.userPreferences.first().defaultProviderConfigId != null
+        if (hasDefault) return
+        val modelId = models.curatedForSelection(providerId).primary.firstOrNull()?.modelId
+            ?: models.firstOrNull()?.modelId
+            ?: return
+        userPreferencesRepository.setDefaultProviderConfig(configId)
+        userPreferencesRepository.setDefaultModel(modelId)
     }
 }

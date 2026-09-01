@@ -24,11 +24,29 @@ data class CuratedModels(
  */
 private val GEMINI_STABLE_MODEL_ID = Regex("""^gemini-(\d+(?:\.\d+)?-)?(pro|flash-lite|flash)(-latest)?$""")
 
-fun List<ModelInfo>.curatedForSelection(providerId: ProviderId): CuratedModels {
-    if (providerId != ProviderId.GOOGLE) return CuratedModels(primary = this, remainder = emptyList())
+/**
+ * OpenAI-compatible `/models` catalogs (used for NVIDIA NIM, DeepSeek, Kimi, and OpenAI itself)
+ * mix chat models in with embeddings, rerankers, speech, and safety/moderation models, and unlike
+ * Gemini's product line there's no single clean id pattern to allowlist against across vendors.
+ * This is a denylist instead: deliberately conservative, since leaving a stray non-chat model in
+ * [CuratedModels.primary] is a much smaller problem than hiding a real chat model behind "Show
+ * all". Keyword match, not id-anchored, so it also catches vendor-prefixed variants.
+ */
+private val NON_CHAT_MODEL_KEYWORD = Regex(
+    """embed|rerank|whisper|\btts\b|speech|guard|moderation|safety|\bclip\b|\bada\b|davinci-instruct|dall-e""",
+    RegexOption.IGNORE_CASE,
+)
 
-    val (primary, remainder) = partition { GEMINI_STABLE_MODEL_ID.matches(it.modelId) }
-    return CuratedModels(primary = primary.sortedWith(geminiModelOrder), remainder = remainder)
+fun List<ModelInfo>.curatedForSelection(providerId: ProviderId): CuratedModels = when (providerId) {
+    ProviderId.GOOGLE -> {
+        val (primary, remainder) = partition { GEMINI_STABLE_MODEL_ID.matches(it.modelId) }
+        CuratedModels(primary = primary.sortedWith(geminiModelOrder), remainder = remainder)
+    }
+    ProviderId.OPENAI -> {
+        val (remainder, primary) = partition { NON_CHAT_MODEL_KEYWORD.containsMatchIn(it.modelId) }
+        CuratedModels(primary = primary, remainder = remainder)
+    }
+    else -> CuratedModels(primary = this, remainder = emptyList())
 }
 
 private val geminiModelOrder = compareBy<ModelInfo>(

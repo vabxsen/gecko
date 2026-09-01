@@ -104,6 +104,10 @@ class ProviderDetailViewModel @Inject constructor(
             saveProviderApiKeyUseCase(id, trimmed)
             apiKeyValue.value = trimmed
             isSavingKey.value = false
+            // Result surfaces reactively as ConnectionStatus on uiState.connectionStatus, same as
+            // the manual "test connection" action — no separate error state needed here.
+            testProviderConnectionUseCase(id)
+            refreshProviderModelsUseCase(id)
         }
     }
 
