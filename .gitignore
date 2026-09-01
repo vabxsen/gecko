@@ -9,6 +9,7 @@
 .cxx
 local.properties
 **/build/
+**/bin/
 *.hprof
 .kotlin/
 

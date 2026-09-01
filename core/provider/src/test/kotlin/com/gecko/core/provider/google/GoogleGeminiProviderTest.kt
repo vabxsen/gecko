@@ -75,6 +75,20 @@ class GoogleGeminiProviderTest {
     }
 
     @Test
+    fun attachedImageIsSentAsGeminiInlineData() = runTest {
+        server.enqueue(MockResponse().setBody("{\"candidates\":[]}").setHeader("Content-Type", "application/json"))
+
+        provider.sendMessage(listOf(userMessage("Describe this", attachmentImageBase64 = "aW1hZ2U=")), model = "gemini-2.5-flash", stream = false).test {
+            awaitItem()
+            awaitItem()
+            awaitComplete()
+        }
+
+        val requestBody = server.takeRequest().body.readUtf8()
+        assertTrue(requestBody.contains("\"inlineData\":{\"mimeType\":\"image/jpeg\",\"data\":\"aW1hZ2U=\"}"))
+    }
+
+    @Test
     fun streamingEmitsImageDeltaForInlineDataParts() = runTest {
         val body = "data: {\"candidates\":[{\"content\":{\"parts\":[" +
             "{\"text\":\"Here you go:\"}," +
@@ -152,5 +166,36 @@ class GoogleGeminiProviderTest {
         assertEquals(1, models.size)
         assertEquals("gemini-1.5-pro", models[0].modelId)
         assertEquals(2_000_000, models[0].contextWindowTokens)
+    }
+
+    @Test
+    fun nonStreamingRetriesOnServerErrorThenSucceeds() = runTest {
+        server.enqueue(MockResponse().setResponseCode(500).setBody("server error"))
+        server.enqueue(MockResponse().setBody("{\"candidates\":[]}").setHeader("Content-Type", "application/json"))
+
+        provider.sendMessage(listOf(userMessage("Hi")), model = "gemini-2.5-flash", stream = false).test {
+            awaitItem()
+            awaitItem() as ChatEvent.Completed
+            awaitComplete()
+        }
+        assertEquals(2, server.requestCount)
+    }
+
+    @Test
+    fun nonStreamingDoesNotRetryNonRetryableStatus() = runTest {
+        server.enqueue(
+            MockResponse().setResponseCode(400)
+                .setBody("{\"error\":{\"message\":\"bad request\"}}")
+                .setHeader("Content-Type", "application/json"),
+        )
+
+        provider.sendMessage(listOf(userMessage("Hi")), model = "gemini-2.5-flash", stream = false).test {
+            assertEquals(ChatEvent.Started(), awaitItem())
+            val error = awaitItem() as ChatEvent.Error
+            assertEquals(false, error.isRetryable)
+            assertEquals(400, error.httpStatusCode)
+            awaitComplete()
+        }
+        assertEquals(1, server.requestCount)
     }
 }

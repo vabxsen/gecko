@@ -1,3 +1,4 @@
+import java.io.File
 import java.util.Properties
 
 plugins {
@@ -9,9 +10,12 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
-val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystorePropertiesFile = sequenceOf(
+    System.getenv("GECKO_KEYSTORE_PROPERTIES")?.takeIf { it.isNotBlank() }?.let(::File),
+    System.getenv("LOCALAPPDATA")?.let { File(it, "Gecko/signing/keystore.properties") },
+).filterNotNull().firstOrNull { it.exists() }
 val keystoreProperties = Properties().apply {
-    if (keystorePropertiesFile.exists()) {
+    if (keystorePropertiesFile != null) {
         keystorePropertiesFile.inputStream().use { load(it) }
     }
 }
@@ -46,7 +50,7 @@ android {
     }
 
     signingConfigs {
-        if (keystorePropertiesFile.exists()) {
+        if (keystorePropertiesFile != null) {
             create("release") {
                 storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
                 storePassword = keystoreProperties.getProperty("storePassword")
@@ -63,7 +67,7 @@ android {
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             // Falls back to debug signing when keystore.properties isn't present (e.g. a
             // fresh checkout on another machine) so the build never breaks outright.
-            signingConfig = if (keystorePropertiesFile.exists()) {
+            signingConfig = if (keystorePropertiesFile != null) {
                 signingConfigs.getByName("release")
             } else {
                 signingConfigs.getByName("debug")

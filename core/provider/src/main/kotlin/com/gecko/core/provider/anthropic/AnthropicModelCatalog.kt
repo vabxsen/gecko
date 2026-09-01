@@ -13,4 +13,9 @@ internal object AnthropicModelCatalog {
 
     fun supportsImagesFor(modelId: String): Boolean =
         textOnlyPrefixes.none { modelId.startsWith(it) }
+
+    /** Safe cross-model default: legacy models cap lower, every current Claude 3.x/4 model
+     * supports at least this much output without needing beta headers. */
+    fun maxOutputTokensFor(modelId: String): Int =
+        if (textOnlyPrefixes.any { modelId.startsWith(it) }) 4096 else 8192
 }

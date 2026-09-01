@@ -3,6 +3,7 @@ package com.gecko.core.data.di
 import android.content.Context
 import androidx.room.Room
 import com.gecko.core.database.GeckoDatabase
+import com.gecko.core.database.GeckoDatabaseMigrations
 import com.gecko.core.database.dao.ConversationDao
 import com.gecko.core.database.dao.MessageDao
 import com.gecko.core.database.dao.ModelCatalogDao
@@ -22,8 +23,7 @@ object DatabaseModule {
     @Singleton
     fun provideGeckoDatabase(@ApplicationContext context: Context): GeckoDatabase =
         Room.databaseBuilder(context, GeckoDatabase::class.java, GeckoDatabase.DATABASE_NAME)
-            // Pre-1.0: no installed base to migrate. Revisit before shipping a real release.
-            .fallbackToDestructiveMigration(dropAllTables = true)
+            .addMigrations(*GeckoDatabaseMigrations.ALL)
             .build()
 
     @Provides

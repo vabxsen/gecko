@@ -83,17 +83,18 @@ class AddProviderViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true, errorMessage = null) }
             val label = state.label.trim().ifBlank { providerId.displayName }
+            val baseUrlOverride = state.baseUrlOverride.trim().ifBlank { null }
             providerConfigRepository.addProvider(providerId, label)
                 .onSuccess { id ->
                     if (providerId == ProviderId.OPENAI) {
-                        providerConfigRepository.setBaseUrlOverride(id, state.baseUrlOverride.trim().ifBlank { null })
+                        providerConfigRepository.setBaseUrlOverride(id, baseUrlOverride)
                     }
                     saveProviderApiKeyUseCase(id, key)
 
                     testProviderConnectionUseCase(id)
                         .onSuccess {
                             val models = refreshProviderModelsUseCase(id).getOrDefault(emptyList())
-                            maybeAdoptAsDefault(id, providerId, models)
+                            maybeAdoptAsDefault(id, providerId, models, baseUrlOverride)
                             _uiState.update { it.copy(isSaving = false) }
                             onSaved()
                         }
@@ -116,10 +117,11 @@ class AddProviderViewModel @Inject constructor(
         configId: String,
         providerId: ProviderId,
         models: List<com.gecko.core.model.provider.ModelInfo>,
+        baseUrlOverride: String?,
     ) {
         val hasDefault = userPreferencesRepository.userPreferences.first().defaultProviderConfigId != null
         if (hasDefault) return
-        val modelId = models.curatedForSelection(providerId).primary.firstOrNull()?.modelId
+        val modelId = models.curatedForSelection(providerId, baseUrlOverride).primary.firstOrNull()?.modelId
             ?: models.firstOrNull()?.modelId
             ?: return
         userPreferencesRepository.setDefaultProviderConfig(configId)

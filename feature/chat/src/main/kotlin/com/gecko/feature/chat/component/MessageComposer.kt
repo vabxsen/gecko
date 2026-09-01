@@ -279,20 +279,21 @@ private fun ComposerActionButton(
         animationSpec = colorAnimSpec,
         label = "composerActionContentColor",
     )
-    IconButton(onClick = onClick, enabled = enabled) {
-        Box(
-            modifier = Modifier
-                .size(38.dp)
-                .background(containerColor, CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = contentDescription,
-                tint = contentColor,
-                modifier = Modifier.size(20.dp),
-            )
-        }
+    Box(
+        modifier = Modifier
+            .padding(end = 2.dp)
+            .size(38.dp)
+            .clip(CircleShape)
+            .background(containerColor, CircleShape)
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = contentColor,
+            modifier = Modifier.size(20.dp),
+        )
     }
 }
 

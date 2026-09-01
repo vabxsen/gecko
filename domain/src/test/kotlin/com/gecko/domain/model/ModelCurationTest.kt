@@ -44,7 +44,10 @@ class ModelCurationTest {
         "nano-banana-pro",
     )
 
-    private val stableModelIds = listOf(
+    private val geminiCatalogIds = listOf(
+        "gemini-pro-latest",
+        "gemini-flash-latest",
+        "gemini-flash-lite-latest",
         "gemini-2.5-flash",
         "gemini-2.5-flash-lite",
         "gemini-2.5-pro",
@@ -59,44 +62,96 @@ class ModelCurationTest {
     )
 
     @Test
-    fun keepsOnlyCleanGeminiChatModelIds() {
-        val models = (stableModelIds + junkModelIds).map(::model)
+    fun GeminiShowsOnlyThreePreferredChatModelsWithFullCatalogAsAdvancedRemainder() {
+        val models = (geminiCatalogIds + junkModelIds).map(::model)
 
         val curated = models.curatedForSelection(ProviderId.GOOGLE)
 
-        assertEquals(stableModelIds.toSet(), curated.primary.map { it.modelId }.toSet())
-        assertEquals(junkModelIds.toSet(), curated.remainder.map { it.modelId }.toSet())
+        assertEquals(
+            listOf("gemini-pro-latest", "gemini-flash-latest", "gemini-flash-lite-latest"),
+            curated.primary.map { it.modelId },
+        )
+        assertEquals(true, curated.curatedAllowlistOnly)
+        // Not surfaced in the compact chat picker, but still reachable (e.g. an advanced
+        // Settings picker) rather than lost entirely.
         assertEquals(true, curated.hasMore)
+        assertEquals(true, curated.remainder.containsAll(models.filter { it !in curated.primary }))
     }
 
     @Test
-    fun sortsLatestAliasesFirstThenNewestVersionThenTier() {
+    fun GeminiFallsBackToRawCatalogWhenNoPreferredAliasesPresent() {
+        val models = listOf("gemini-1.5-pro-001", "gemini-1.5-flash-001").map(::model)
+
+        val curated = models.curatedForSelection(ProviderId.GOOGLE)
+
+        assertEquals(models.map { it.modelId }, curated.primary.map { it.modelId })
+        assertEquals(false, curated.curatedAllowlistOnly)
+        assertEquals(false, curated.hasMore)
+    }
+
+    @Test
+    fun GeminiUsesStableVersionedModelsWhenLatestAliasesAreUnavailable() {
         val models = listOf(
             "gemini-2.5-flash-lite",
             "gemini-2.5-flash",
             "gemini-2.5-pro",
-            "gemini-flash-lite-latest",
-            "gemini-pro-latest",
-            "gemini-flash-latest",
-            "gemini-3.5-pro",
-            "gemini-3.5-flash",
         ).map(::model)
 
         val curated = models.curatedForSelection(ProviderId.GOOGLE)
 
         assertEquals(
             listOf(
-                "gemini-pro-latest",
-                "gemini-flash-latest",
-                "gemini-flash-lite-latest",
-                "gemini-3.5-pro",
-                "gemini-3.5-flash",
                 "gemini-2.5-pro",
                 "gemini-2.5-flash",
                 "gemini-2.5-flash-lite",
             ),
             curated.primary.map { it.modelId },
         )
+    }
+
+    @Test
+    fun NvidiaNimShowsOnlySupportedNemotronChatShortlist() {
+        val preferred = listOf(
+            "nvidia/nemotron-3.5-lightning-30b-a3b",
+            "nvidia/nemotron-3-super-120b-a12b",
+            "nvidia/nemotron-3-nano-30b-a3b",
+        )
+        val noisyCatalog = preferred + listOf(
+            "nvidia/nemotron-parse",
+            "nvidia/cosmos-reason2-8b",
+            "nvidia/nvclip",
+            "meta/llama-3.2-11b-vision-instruct",
+        )
+        val models = noisyCatalog.map { ModelInfo(ProviderId.OPENAI, it, it, 128_000, true, false) }
+
+        val curated = models.curatedForSelection(
+            providerId = ProviderId.OPENAI,
+            baseUrlOverride = "https://integrate.api.nvidia.com/v1",
+        )
+
+        assertEquals(preferred, curated.primary.map { it.modelId })
+        assertEquals(true, curated.curatedAllowlistOnly)
+        assertEquals(true, curated.hasMore)
+        assertEquals(noisyCatalog.drop(3).toSet(), curated.remainder.map { it.modelId }.toSet())
+    }
+
+    @Test
+    fun NvidiaNimFallsBackToRawCatalogWhenPreferredModelsUnavailable() {
+        val noisyCatalog = listOf(
+            "nvidia/nemotron-parse",
+            "nvidia/cosmos-reason2-8b",
+            "meta/llama-3.2-11b-vision-instruct",
+        )
+        val models = noisyCatalog.map { ModelInfo(ProviderId.OPENAI, it, it, 128_000, true, false) }
+
+        val curated = models.curatedForSelection(
+            providerId = ProviderId.OPENAI,
+            baseUrlOverride = "https://integrate.api.nvidia.com/v1",
+        )
+
+        assertEquals(noisyCatalog, curated.primary.map { it.modelId })
+        assertEquals(false, curated.curatedAllowlistOnly)
+        assertEquals(false, curated.hasMore)
     }
 
     @Test
@@ -125,7 +180,13 @@ class ModelCurationTest {
 
     @Test
     fun filtersOutNonChatModelsForOpenAiProtocolProviders() {
-        val chatIds = listOf("gpt-4o", "nvidia/llama-3.1-nemotron-70b-instruct", "deepseek-chat")
+        val chatIds = listOf(
+            "gpt-4o",
+            "gpt-3.5-turbo",
+            "nvidia/llama-3.1-nemotron-70b-instruct",
+            "deepseek-chat",
+            "moonshot-v1-8k",
+        )
         val nonChatIds = listOf(
             "text-embedding-3-small",
             "nvidia/nv-rerankqa-mistral-4b-v3",
@@ -139,6 +200,13 @@ class ModelCurationTest {
             "text-ada-001",
             "davinci-instruct-beta",
             "dall-e-3",
+            "gpt-4o-realtime-preview",
+            "gpt-4o-mini-transcribe",
+            "gpt-3.5-turbo-instruct",
+            "computer-use-preview",
+            "gpt-image-1",
+            "davinci-002",
+            "babbage-002",
         )
         val models = (chatIds + nonChatIds).map { ModelInfo(ProviderId.OPENAI, it, it, 128_000, true, true) }
 

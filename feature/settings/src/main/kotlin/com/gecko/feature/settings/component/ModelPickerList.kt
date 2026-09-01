@@ -51,6 +51,7 @@ fun ModelSelectorRow(
 fun LazyListScope.modelPickerItems(
     models: List<ModelInfo>,
     providerId: ProviderId,
+    baseUrlOverride: String?,
     selectedModelId: String?,
     showAll: Boolean,
     onToggleShowAll: () -> Unit,
@@ -62,7 +63,7 @@ fun LazyListScope.modelPickerItems(
         return
     }
 
-    val curated = models.curatedForSelection(providerId)
+    val curated = models.curatedForSelection(providerId, baseUrlOverride)
 
     items(curated.primary, key = { it.modelId }) { model ->
         ModelRow(model = model, selected = model.modelId == selectedModelId, onClick = { onSelectModel(model.modelId) })

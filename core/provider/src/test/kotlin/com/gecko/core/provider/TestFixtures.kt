@@ -14,6 +14,7 @@ internal fun testMessage(role: MessageRole, content: String, id: String = "m-${c
     status = MessageStatus.COMPLETE,
 )
 
-internal fun userMessage(content: String): ChatMessage = testMessage(MessageRole.USER, content)
+internal fun userMessage(content: String, attachmentImageBase64: String? = null): ChatMessage =
+    testMessage(MessageRole.USER, content).copy(attachmentImageBase64 = attachmentImageBase64)
 internal fun assistantMessage(content: String): ChatMessage = testMessage(MessageRole.ASSISTANT, content)
 internal fun systemMessage(content: String): ChatMessage = testMessage(MessageRole.SYSTEM, content)

@@ -9,13 +9,19 @@ import com.gecko.core.network.sse.SseException
 import com.gecko.core.network.sse.streamSse
 import com.gecko.core.provider.internal.ProviderHttpException
 import com.gecko.core.provider.internal.ProviderJson
+import com.gecko.core.provider.internal.RetryPolicy
 import com.gecko.core.provider.internal.bodyOrThrow
-import kotlinx.coroutines.Dispatchers
+import com.gecko.core.provider.internal.executeWithRetry
+import com.gecko.core.provider.internal.friendlyMessageFor
+import com.gecko.core.provider.internal.httpStatusCodeOrNull
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
 import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -38,7 +44,7 @@ internal class OpenAiChatEngine(
 
         val requestBody = OpenAiChatRequest(
             model = model,
-            messages = messages.map { OpenAiMessage(role = it.role.toWireRole(), content = it.content) },
+            messages = messages.map { it.toOpenAiMessage() },
             stream = stream,
             streamOptions = if (stream) OpenAiStreamOptions(includeUsage = true) else null,
         )
@@ -49,26 +55,40 @@ internal class OpenAiChatEngine(
             .build()
 
         if (stream) {
-            var finishReason: FinishReason? = null
-            var usage: TokenUsage? = null
+            var attempt = 0
+            var contentReceived = false
+            while (true) {
+                attempt++
+                var finishReason: FinishReason? = null
+                var usage: TokenUsage? = null
+                try {
+                    httpClient.streamSse(request).collect { event ->
+                        if (event.data == "[DONE]") return@collect
+                        val chunk = runCatching { ProviderJson.decodeFromString(OpenAiStreamChunk.serializer(), event.data) }
+                            .getOrNull() ?: return@collect
 
-            httpClient.streamSse(request).collect { event ->
-                if (event.data == "[DONE]") return@collect
-                val chunk = runCatching { ProviderJson.decodeFromString(OpenAiStreamChunk.serializer(), event.data) }
-                    .getOrNull() ?: return@collect
-
-                chunk.choices.firstOrNull()?.let { choice ->
-                    choice.delta.content?.let { text -> if (text.isNotEmpty()) emit(ChatEvent.ContentDelta(text)) }
-                    choice.finishReason?.let { finishReason = it.toFinishReason() }
-                }
-                chunk.usage?.let {
-                    usage = TokenUsage(it.promptTokens, it.completionTokens, it.totalTokens)
+                        chunk.choices.firstOrNull()?.let { choice ->
+                            choice.delta.content?.let { text ->
+                                if (text.isNotEmpty()) {
+                                    contentReceived = true
+                                    emit(ChatEvent.ContentDelta(text))
+                                }
+                            }
+                            choice.finishReason?.let { finishReason = it.toFinishReason() }
+                        }
+                        chunk.usage?.let {
+                            usage = TokenUsage(it.promptTokens, it.completionTokens, it.totalTokens)
+                        }
+                    }
+                    emit(ChatEvent.Completed(finishReason ?: FinishReason.STOP, usage))
+                    break
+                } catch (e: Exception) {
+                    if (contentReceived || attempt >= RetryPolicy.MAX_ATTEMPTS || !RetryPolicy.isRetryableThrowable(e)) throw e
+                    delay(RetryPolicy.backoffDelayMillis(attempt))
                 }
             }
-
-            emit(ChatEvent.Completed(finishReason ?: FinishReason.STOP, usage))
         } else {
-            val response = withContext(Dispatchers.IO) { httpClient.newCall(request).execute() }
+            val response = httpClient.executeWithRetry(request)
             val bodyText = try {
                 response.bodyOrThrow()
             } catch (e: ProviderHttpException) {
@@ -89,6 +109,31 @@ private fun MessageRole.toWireRole(): String = when (this) {
     MessageRole.SYSTEM -> "system"
 }
 
+private fun ChatMessage.toOpenAiMessage(): OpenAiMessage {
+    val attachment = attachmentImageBase64
+    val messageText = content
+    val requestContent = if (attachment == null) {
+        JsonPrimitive(messageText)
+    } else {
+        JsonArray(
+            buildList {
+                if (messageText.isNotEmpty()) {
+                    add(JsonObject(mapOf("type" to JsonPrimitive("text"), "text" to JsonPrimitive(messageText))))
+                }
+                add(
+                    JsonObject(
+                        mapOf(
+                            "type" to JsonPrimitive("image_url"),
+                            "image_url" to JsonObject(mapOf("url" to JsonPrimitive("data:image/jpeg;base64,$attachment"))),
+                        ),
+                    ),
+                )
+            },
+        )
+    }
+    return OpenAiMessage(role = role.toWireRole(), content = requestContent)
+}
+
 private fun String.toFinishReason(): FinishReason = when (this) {
     "stop" -> FinishReason.STOP
     "length" -> FinishReason.LENGTH
@@ -104,9 +149,17 @@ internal fun ProviderHttpException.toReadableException(): Exception {
 }
 
 private fun Flow<ChatEvent>.catchAsChatEvent(): Flow<ChatEvent> = catch { e ->
-    val message = when (e) {
+    val rawMessage = when (e) {
         is SseException -> e.message ?: "Stream failed"
         else -> e.message ?: "Request failed"
     }
-    emit(ChatEvent.Error(message = message, cause = e, isRetryable = true))
+    val statusCode = e.httpStatusCodeOrNull()
+    emit(
+        ChatEvent.Error(
+            message = friendlyMessageFor(statusCode, rawMessage),
+            cause = e,
+            isRetryable = RetryPolicy.isRetryableThrowable(e),
+            httpStatusCode = statusCode,
+        ),
+    )
 }

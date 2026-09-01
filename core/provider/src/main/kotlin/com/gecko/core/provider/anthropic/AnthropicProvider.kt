@@ -12,12 +12,15 @@ import com.gecko.core.network.sse.streamSse
 import com.gecko.core.provider.api.AiProvider
 import com.gecko.core.provider.internal.ProviderHttpException
 import com.gecko.core.provider.internal.ProviderJson
+import com.gecko.core.provider.internal.RetryPolicy
 import com.gecko.core.provider.internal.bodyOrThrow
-import kotlinx.coroutines.Dispatchers
+import com.gecko.core.provider.internal.executeWithRetry
+import com.gecko.core.provider.internal.friendlyMessageFor
+import com.gecko.core.provider.internal.httpStatusCodeOrNull
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -30,7 +33,6 @@ class AnthropicProvider(
     private val apiKey: String,
     private val baseUrl: String = DEFAULT_BASE_URL,
     private val httpClient: OkHttpClient,
-    private val maxTokens: Int = DEFAULT_MAX_TOKENS,
 ) : AiProvider {
 
     override val id: ProviderId = ProviderId.ANTHROPIC
@@ -42,11 +44,26 @@ class AnthropicProvider(
             .joinToString("\n\n") { it.content }
             .takeIf { it.isNotBlank() }
         val conversation = messages.filter { it.role != MessageRole.SYSTEM }
-            .map { AnthropicMessage(role = if (it.role == MessageRole.ASSISTANT) "assistant" else "user", content = it.content) }
+            .map { message ->
+                AnthropicMessage(
+                    role = if (message.role == MessageRole.ASSISTANT) "assistant" else "user",
+                    content = buildList {
+                        if (message.content.isNotEmpty()) add(AnthropicContentBlock(text = message.content))
+                        message.attachmentImageBase64?.let { image ->
+                            add(
+                                AnthropicContentBlock(
+                                    type = "image",
+                                    source = AnthropicImageSource(mediaType = JPEG_MIME_TYPE, data = image),
+                                ),
+                            )
+                        }
+                    },
+                )
+            }
 
         val requestBody = AnthropicRequest(
             model = model,
-            maxTokens = maxTokens,
+            maxTokens = AnthropicModelCatalog.maxOutputTokensFor(model),
             system = systemPrompt,
             messages = conversation,
             stream = stream,
@@ -58,43 +75,56 @@ class AnthropicProvider(
             .build()
 
         if (stream) {
-            var inputTokens = 0
-            var outputTokens = 0
-            var finishReason: FinishReason? = null
-            var hadError = false
+            var attempt = 0
+            var contentReceived = false
+            while (true) {
+                attempt++
+                var inputTokens = 0
+                var outputTokens = 0
+                var finishReason: FinishReason? = null
+                var hadError = false
+                try {
+                    httpClient.streamSse(request).collect { event ->
+                        if (event.data.isBlank()) return@collect
+                        val parsed = runCatching { ProviderJson.decodeFromString(AnthropicStreamEvent.serializer(), event.data) }
+                            .getOrNull() ?: return@collect
 
-            httpClient.streamSse(request).collect { event ->
-                if (event.data.isBlank()) return@collect
-                val parsed = runCatching { ProviderJson.decodeFromString(AnthropicStreamEvent.serializer(), event.data) }
-                    .getOrNull() ?: return@collect
-
-                when (parsed.type) {
-                    "message_start" -> inputTokens = parsed.message?.usage?.inputTokens ?: inputTokens
-                    "content_block_delta" -> parsed.delta?.text?.let { text ->
-                        if (text.isNotEmpty()) emit(ChatEvent.ContentDelta(text))
+                        when (parsed.type) {
+                            "message_start" -> inputTokens = parsed.message?.usage?.inputTokens ?: inputTokens
+                            "content_block_delta" -> parsed.delta?.text?.let { text ->
+                                if (text.isNotEmpty()) {
+                                    contentReceived = true
+                                    emit(ChatEvent.ContentDelta(text))
+                                }
+                            }
+                            "message_delta" -> {
+                                parsed.delta?.stopReason?.let { finishReason = it.toFinishReason() }
+                                parsed.usage?.let { outputTokens = it.outputTokens }
+                            }
+                            "error" -> {
+                                hadError = true
+                                val rawMessage = parsed.error?.message?.takeIf { it.isNotBlank() } ?: "Anthropic stream error"
+                                emit(
+                                    ChatEvent.Error(
+                                        message = friendlyMessageFor(null, rawMessage),
+                                        cause = null,
+                                        isRetryable = false,
+                                    ),
+                                )
+                            }
+                        }
                     }
-                    "message_delta" -> {
-                        parsed.delta?.stopReason?.let { finishReason = it.toFinishReason() }
-                        parsed.usage?.let { outputTokens = it.outputTokens }
+                    if (!hadError) {
+                        emit(ChatEvent.Completed(finishReason ?: FinishReason.STOP, TokenUsage(inputTokens, outputTokens, inputTokens + outputTokens)))
                     }
-                    "error" -> {
-                        hadError = true
-                        emit(
-                            ChatEvent.Error(
-                                message = parsed.error?.message?.takeIf { it.isNotBlank() } ?: "Anthropic stream error",
-                                cause = null,
-                                isRetryable = true,
-                            ),
-                        )
-                    }
+                    break
+                } catch (e: Exception) {
+                    if (contentReceived || attempt >= RetryPolicy.MAX_ATTEMPTS || !RetryPolicy.isRetryableThrowable(e)) throw e
+                    delay(RetryPolicy.backoffDelayMillis(attempt))
                 }
             }
-
-            if (!hadError) {
-                emit(ChatEvent.Completed(finishReason ?: FinishReason.STOP, TokenUsage(inputTokens, outputTokens, inputTokens + outputTokens)))
-            }
         } else {
-            val response = withContext(Dispatchers.IO) { httpClient.newCall(request).execute() }
+            val response = httpClient.executeWithRetry(request)
             val bodyText = try {
                 response.bodyOrThrow()
             } catch (e: ProviderHttpException) {
@@ -107,39 +137,45 @@ class AnthropicProvider(
             emit(ChatEvent.Completed(parsed.stopReason?.toFinishReason() ?: FinishReason.STOP, usage))
         }
     }.catch { e ->
-        val message = when (e) {
+        val rawMessage = when (e) {
             is SseException -> e.message ?: "Stream failed"
             else -> e.message ?: "Request failed"
         }
-        emit(ChatEvent.Error(message = message, cause = e, isRetryable = true))
+        val statusCode = e.httpStatusCodeOrNull()
+        emit(
+            ChatEvent.Error(
+                message = friendlyMessageFor(statusCode, rawMessage),
+                cause = e,
+                isRetryable = RetryPolicy.isRetryableThrowable(e),
+                httpStatusCode = statusCode,
+            ),
+        )
     }
 
     override suspend fun listModels(): Result<List<ModelInfo>> = runCatching {
-        withContext(Dispatchers.IO) {
-            val request = Request.Builder()
-                .url("$baseUrl/models")
-                .applyAuthHeaders(apiKey)
-                .get()
-                .build()
+        val request = Request.Builder()
+            .url("$baseUrl/models")
+            .applyAuthHeaders(apiKey)
+            .get()
+            .build()
 
-            val response = httpClient.newCall(request).execute()
-            val bodyText = try {
-                response.bodyOrThrow()
-            } catch (e: ProviderHttpException) {
-                throw e.toReadableException()
-            }
+        val response = httpClient.executeWithRetry(request)
+        val bodyText = try {
+            response.bodyOrThrow()
+        } catch (e: ProviderHttpException) {
+            throw e.toReadableException()
+        }
 
-            val parsed = ProviderJson.decodeFromString(AnthropicModelsResponse.serializer(), bodyText)
-            parsed.data.map { model ->
-                ModelInfo(
-                    providerId = ProviderId.ANTHROPIC,
-                    modelId = model.id,
-                    displayName = model.displayName,
-                    contextWindowTokens = AnthropicModelCatalog.contextWindowFor(model.id),
-                    supportsStreaming = true,
-                    supportsImages = AnthropicModelCatalog.supportsImagesFor(model.id),
-                )
-            }
+        val parsed = ProviderJson.decodeFromString(AnthropicModelsResponse.serializer(), bodyText)
+        parsed.data.map { model ->
+            ModelInfo(
+                providerId = ProviderId.ANTHROPIC,
+                modelId = model.id,
+                displayName = model.displayName,
+                contextWindowTokens = AnthropicModelCatalog.contextWindowFor(model.id),
+                supportsStreaming = true,
+                supportsImages = AnthropicModelCatalog.supportsImagesFor(model.id),
+            )
         }
     }
 
@@ -147,7 +183,7 @@ class AnthropicProvider(
 
     companion object {
         const val DEFAULT_BASE_URL = "https://api.anthropic.com/v1"
-        const val DEFAULT_MAX_TOKENS = 4096
+        private const val JPEG_MIME_TYPE = "image/jpeg"
         private const val ANTHROPIC_VERSION = "2023-06-01"
 
         internal fun Request.Builder.applyAuthHeaders(apiKey: String): Request.Builder = this

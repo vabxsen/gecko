@@ -8,11 +8,10 @@ import com.gecko.core.provider.api.AiProvider
 import com.gecko.core.provider.internal.ProviderHttpException
 import com.gecko.core.provider.internal.ProviderJson
 import com.gecko.core.provider.internal.bodyOrThrow
+import com.gecko.core.provider.internal.executeWithRetry
 import com.gecko.core.provider.openai.OpenAiChatEngine
 import com.gecko.core.provider.openai.toReadableException
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 
@@ -42,31 +41,29 @@ class OpenRouterProvider(
         engine.sendMessage(messages, model, stream)
 
     override suspend fun listModels(): Result<List<ModelInfo>> = runCatching {
-        withContext(Dispatchers.IO) {
-            val request = Request.Builder()
-                .url("$baseUrl/models")
-                .header("Authorization", "Bearer $apiKey")
-                .get()
-                .build()
+        val request = Request.Builder()
+            .url("$baseUrl/models")
+            .header("Authorization", "Bearer $apiKey")
+            .get()
+            .build()
 
-            val response = httpClient.newCall(request).execute()
-            val bodyText = try {
-                response.bodyOrThrow()
-            } catch (e: ProviderHttpException) {
-                throw e.toReadableException()
-            }
+        val response = httpClient.executeWithRetry(request)
+        val bodyText = try {
+            response.bodyOrThrow()
+        } catch (e: ProviderHttpException) {
+            throw e.toReadableException()
+        }
 
-            val parsed = ProviderJson.decodeFromString(OpenRouterModelsResponse.serializer(), bodyText)
-            parsed.data.map { model ->
-                ModelInfo(
-                    providerId = ProviderId.OPENROUTER,
-                    modelId = model.id,
-                    displayName = model.name,
-                    contextWindowTokens = model.contextLength,
-                    supportsStreaming = true,
-                    supportsImages = model.architecture.modality.contains("image"),
-                )
-            }
+        val parsed = ProviderJson.decodeFromString(OpenRouterModelsResponse.serializer(), bodyText)
+        parsed.data.map { model ->
+            ModelInfo(
+                providerId = ProviderId.OPENROUTER,
+                modelId = model.id,
+                displayName = model.name,
+                contextWindowTokens = model.contextLength,
+                supportsStreaming = true,
+                supportsImages = model.architecture.modality.contains("image"),
+            )
         }
     }
 

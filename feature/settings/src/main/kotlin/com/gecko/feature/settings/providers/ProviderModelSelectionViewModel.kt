@@ -18,6 +18,7 @@ import kotlinx.coroutines.launch
 
 data class ProviderModelSelectionUiState(
     val providerId: ProviderId? = null,
+    val baseUrlOverride: String? = null,
     val models: List<ModelInfo> = emptyList(),
     val selectedModelId: String? = null,
 )
@@ -36,6 +37,7 @@ class ProviderModelSelectionViewModel @Inject constructor(
     ) { config, models ->
         ProviderModelSelectionUiState(
             providerId = config?.providerId,
+            baseUrlOverride = config?.baseUrlOverride,
             models = models,
             selectedModelId = config?.selectedModelId,
         )

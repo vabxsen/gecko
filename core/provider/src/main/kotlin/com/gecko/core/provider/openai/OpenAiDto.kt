@@ -2,9 +2,16 @@ package com.gecko.core.provider.openai
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 
 @Serializable
 internal data class OpenAiMessage(
+    val role: String,
+    val content: JsonElement,
+)
+
+@Serializable
+internal data class OpenAiResponseMessage(
     val role: String,
     val content: String,
 )
@@ -49,7 +56,7 @@ internal data class OpenAiStreamChunk(
 
 @Serializable
 internal data class OpenAiChoice(
-    val message: OpenAiMessage,
+    val message: OpenAiResponseMessage,
     @SerialName("finish_reason") val finishReason: String? = null,
 )
 

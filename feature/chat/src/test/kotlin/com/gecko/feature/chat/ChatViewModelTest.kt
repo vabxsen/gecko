@@ -170,6 +170,37 @@ class ChatViewModelTest {
     }
 
     @Test
+    fun sendingWhileAlreadyGeneratingIsANoop() = runTest {
+        val conversationRepository = FakeConversationRepository()
+        var invocationCount = 0
+        val chatCompletionRepository = FakeChatCompletionRepository(
+            flowBuilder = {
+                invocationCount++
+                flow {
+                    emit(ChatEvent.Started())
+                    kotlinx.coroutines.delay(Long.MAX_VALUE / 2)
+                }
+            },
+        )
+        val viewModel = buildViewModel(conversationRepository = conversationRepository, chatCompletionRepository = chatCompletionRepository)
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        advanceUntilIdle()
+
+        viewModel.sendMessage("Hello")
+        runCurrent()
+        assertEquals(true, viewModel.uiState.value.isGenerating)
+
+        val messagesAfterFirstSend = viewModel.uiState.value.messages.size
+
+        viewModel.sendMessage("Second, while still generating")
+        viewModel.regenerate()
+        runCurrent()
+
+        assertEquals(1, invocationCount)
+        assertEquals(messagesAfterFirstSend, viewModel.uiState.value.messages.size)
+    }
+
+    @Test
     fun modelSelectorObservesEnabledProviders() = runTest {
         val providerConfigRepository = FakeProviderConfigRepository()
         val viewModel = buildViewModel(providerConfigRepository = providerConfigRepository, defaultProviderId = null)

@@ -47,6 +47,7 @@ fun DefaultModelSelectionScreen(
             modelPickerItems(
                 models = uiState.models,
                 providerId = providerId,
+                baseUrlOverride = uiState.baseUrlOverride,
                 selectedModelId = uiState.selectedModelId,
                 showAll = showAllModels,
                 onToggleShowAll = { showAllModels = !showAllModels },

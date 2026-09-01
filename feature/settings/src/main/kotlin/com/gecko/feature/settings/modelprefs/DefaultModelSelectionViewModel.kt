@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 
 data class DefaultModelSelectionUiState(
     val providerId: ProviderId? = null,
+    val baseUrlOverride: String? = null,
     val models: List<ModelInfo> = emptyList(),
     val selectedModelId: String? = null,
 )
@@ -39,6 +40,7 @@ class DefaultModelSelectionViewModel @Inject constructor(
     ) { config, models, prefs ->
         DefaultModelSelectionUiState(
             providerId = config?.providerId,
+            baseUrlOverride = config?.baseUrlOverride,
             models = models,
             // Only show a checkmark if this provider is already the app-wide default — visiting
             // another provider's model list shouldn't show a stale selection from a different key.

@@ -11,6 +11,7 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -73,6 +74,21 @@ class OpenAiProviderTest {
     }
 
     @Test
+    fun attachedImageIsSentAsOpenAiImageUrlPart() = runTest {
+        server.enqueue(MockResponse().setBody("{\"choices\":[]}").setHeader("Content-Type", "application/json"))
+
+        provider.sendMessage(listOf(userMessage("Describe this", attachmentImageBase64 = "aW1hZ2U=")), model = "gpt-4o", stream = false).test {
+            awaitItem()
+            awaitItem()
+            awaitComplete()
+        }
+
+        val requestBody = server.takeRequest().body.readUtf8()
+        assertTrue(requestBody.contains("\"type\":\"image_url\""))
+        assertTrue(requestBody.contains("data:image/jpeg;base64,aW1hZ2U="))
+    }
+
+    @Test
     fun httpErrorDuringStreamEmitsChatEventError() = runTest {
         server.enqueue(
             MockResponse().setResponseCode(401)
@@ -83,9 +99,62 @@ class OpenAiProviderTest {
         provider.sendMessage(listOf(userMessage("Hi")), model = "gpt-4o", stream = true).test {
             assertEquals(ChatEvent.Started(), awaitItem())
             val error = awaitItem() as ChatEvent.Error
-            assertTrue(error.isRetryable)
+            assertFalse(error.isRetryable)
+            assertEquals(401, error.httpStatusCode)
+            assertEquals("Invalid API key — check it in Settings.", error.message)
             awaitComplete()
         }
+    }
+
+    @Test
+    fun nonStreamingRetriesOnServerErrorThenSucceeds() = runTest {
+        server.enqueue(MockResponse().setResponseCode(500).setBody("server error"))
+        server.enqueue(
+            MockResponse().setBody("""{"choices":[{"message":{"role":"assistant","content":"Hi"},"finish_reason":"stop"}]}""")
+                .setHeader("Content-Type", "application/json"),
+        )
+
+        provider.sendMessage(listOf(userMessage("Hi")), model = "gpt-4o", stream = false).test {
+            assertEquals(ChatEvent.Started(), awaitItem())
+            assertEquals(ChatEvent.ContentDelta("Hi"), awaitItem())
+            awaitItem() as ChatEvent.Completed
+            awaitComplete()
+        }
+        assertEquals(2, server.requestCount)
+    }
+
+    @Test
+    fun nonStreamingDoesNotRetryNonRetryableStatus() = runTest {
+        server.enqueue(
+            MockResponse().setResponseCode(401)
+                .setBody("{\"error\":{\"message\":\"Invalid API key\"}}")
+                .setHeader("Content-Type", "application/json"),
+        )
+
+        provider.sendMessage(listOf(userMessage("Hi")), model = "gpt-4o", stream = false).test {
+            assertEquals(ChatEvent.Started(), awaitItem())
+            val error = awaitItem() as ChatEvent.Error
+            assertFalse(error.isRetryable)
+            assertEquals(401, error.httpStatusCode)
+            awaitComplete()
+        }
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun streamingRetriesConnectionFailureBeforeAnyContent() = runTest {
+        server.enqueue(MockResponse().setResponseCode(503))
+        val body = "data: {\"choices\":[{\"delta\":{\"content\":\"Hi\"},\"finish_reason\":\"stop\"}]}\n\n" +
+            "data: [DONE]\n\n"
+        server.enqueue(MockResponse().setBody(body).setHeader("Content-Type", "text/event-stream"))
+
+        provider.sendMessage(listOf(userMessage("Hi")), model = "gpt-4o", stream = true).test {
+            assertEquals(ChatEvent.Started(), awaitItem())
+            assertEquals(ChatEvent.ContentDelta("Hi"), awaitItem())
+            awaitItem() as ChatEvent.Completed
+            awaitComplete()
+        }
+        assertEquals(2, server.requestCount)
     }
 
     @Test

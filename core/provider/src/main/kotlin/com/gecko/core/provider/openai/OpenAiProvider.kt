@@ -8,9 +8,8 @@ import com.gecko.core.provider.api.AiProvider
 import com.gecko.core.provider.internal.ProviderHttpException
 import com.gecko.core.provider.internal.ProviderJson
 import com.gecko.core.provider.internal.bodyOrThrow
-import kotlinx.coroutines.Dispatchers
+import com.gecko.core.provider.internal.executeWithRetry
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 
@@ -32,32 +31,30 @@ class OpenAiProvider(
         engine.sendMessage(messages, model, stream)
 
     override suspend fun listModels(): Result<List<ModelInfo>> = runCatching {
-        withContext(Dispatchers.IO) {
-            val request = Request.Builder()
-                .url("$baseUrl/models")
-                .header("Authorization", "Bearer $apiKey")
-                .get()
-                .build()
+        val request = Request.Builder()
+            .url("$baseUrl/models")
+            .header("Authorization", "Bearer $apiKey")
+            .get()
+            .build()
 
-            val response = httpClient.newCall(request).execute()
-            val bodyText = try {
-                response.bodyOrThrow()
-            } catch (e: ProviderHttpException) {
-                throw e.toReadableException()
-            }
+        val response = httpClient.executeWithRetry(request)
+        val bodyText = try {
+            response.bodyOrThrow()
+        } catch (e: ProviderHttpException) {
+            throw e.toReadableException()
+        }
 
-            val parsed = ProviderJson.decodeFromString(OpenAiModelsResponse.serializer(), bodyText)
-            parsed.data.map { model ->
-                val meta = OpenAiModelCatalog.metadataFor(model.id)
-                ModelInfo(
-                    providerId = ProviderId.OPENAI,
-                    modelId = model.id,
-                    displayName = model.id,
-                    contextWindowTokens = meta.contextWindow,
-                    supportsStreaming = true,
-                    supportsImages = meta.supportsImages,
-                )
-            }
+        val parsed = ProviderJson.decodeFromString(OpenAiModelsResponse.serializer(), bodyText)
+        parsed.data.map { model ->
+            val meta = OpenAiModelCatalog.metadataFor(model.id)
+            ModelInfo(
+                providerId = ProviderId.OPENAI,
+                modelId = model.id,
+                displayName = model.id,
+                contextWindowTokens = meta.contextWindow,
+                supportsStreaming = true,
+                supportsImages = meta.supportsImages,
+            )
         }
     }
 

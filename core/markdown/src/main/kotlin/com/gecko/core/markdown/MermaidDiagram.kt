@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.os.Handler
 import android.os.Looper
 import android.webkit.JavascriptInterface
+import android.webkit.WebSettings
 import android.webkit.WebView
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -35,6 +36,8 @@ fun MermaidDiagram(source: String, isDark: Boolean, modifier: Modifier = Modifie
         factory = { context ->
             WebView(context).apply {
                 settings.javaScriptEnabled = true
+                settings.domStorageEnabled = false
+                settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
                 setBackgroundColor(android.graphics.Color.TRANSPARENT)
                 addJavascriptInterface(
                     object {
@@ -80,7 +83,7 @@ private fun buildHtml(source: String, isDark: Boolean): String {
         <div id="container"></div>
         <script src="mermaid.min.js"></script>
         <script>
-          mermaid.initialize({ startOnLoad: false, theme: '$theme', securityLevel: 'loose' });
+          mermaid.initialize({ startOnLoad: false, theme: '$theme', securityLevel: 'strict' });
           mermaid.render('geckoMermaidDiagram', $encodedSource).then(function (result) {
             document.getElementById('container').innerHTML = result.svg;
             AndroidBridge.onRendered(document.getElementById('container').scrollHeight);

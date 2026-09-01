@@ -14,7 +14,7 @@ data class ChatMessage(
     val modelId: String? = null,
     val tokenUsage: TokenUsage? = null,
     val errorMessage: String? = null,
-    /** Base64-encoded JPEG the user attached. Displayed inline; not sent to the AI provider. */
+    /** Base64-encoded JPEG the user attached. Displayed inline and sent to the AI provider. */
     val attachmentImageBase64: String? = null,
     /** Base64-encoded image an image-output model (e.g. Gemini's "-image" models) generated. */
     val generatedImageBase64: String? = null,

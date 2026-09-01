@@ -12,12 +12,15 @@ import com.gecko.core.network.sse.streamSse
 import com.gecko.core.provider.api.AiProvider
 import com.gecko.core.provider.internal.ProviderHttpException
 import com.gecko.core.provider.internal.ProviderJson
+import com.gecko.core.provider.internal.RetryPolicy
 import com.gecko.core.provider.internal.bodyOrThrow
-import kotlinx.coroutines.Dispatchers
+import com.gecko.core.provider.internal.executeWithRetry
+import com.gecko.core.provider.internal.friendlyMessageFor
+import com.gecko.core.provider.internal.httpStatusCodeOrNull
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -44,7 +47,12 @@ class GoogleGeminiProvider(
             .map {
                 GeminiContent(
                     role = if (it.role == MessageRole.ASSISTANT) "model" else "user",
-                    parts = listOf(GeminiPart(it.content)),
+                    parts = buildList {
+                        if (it.content.isNotEmpty()) add(GeminiPart(text = it.content))
+                        it.attachmentImageBase64?.let { image ->
+                            add(GeminiPart(inlineData = GeminiInlineData(mimeType = JPEG_MIME_TYPE, data = image)))
+                        }
+                    },
                 )
             }
         val requestBody = GeminiRequest(
@@ -70,30 +78,45 @@ class GoogleGeminiProvider(
             .build()
 
         if (stream) {
-            var finishReason: FinishReason? = null
-            var usage: TokenUsage? = null
+            var attempt = 0
+            var contentReceived = false
+            while (true) {
+                attempt++
+                var finishReason: FinishReason? = null
+                var usage: TokenUsage? = null
+                try {
+                    httpClient.streamSse(request).collect { event ->
+                        if (event.data.isBlank()) return@collect
+                        val parsed = runCatching {
+                            ProviderJson.decodeFromString(GeminiGenerateContentResponse.serializer(), event.data)
+                        }.getOrNull() ?: return@collect
 
-            httpClient.streamSse(request).collect { event ->
-                if (event.data.isBlank()) return@collect
-                val parsed = runCatching {
-                    ProviderJson.decodeFromString(GeminiGenerateContentResponse.serializer(), event.data)
-                }.getOrNull() ?: return@collect
-
-                parsed.candidates.firstOrNull()?.let { candidate ->
-                    candidate.content.parts.forEach { part ->
-                        part.text?.takeIf { it.isNotEmpty() }?.let { emit(ChatEvent.ContentDelta(it)) }
-                        part.inlineData?.let { emit(ChatEvent.ImageDelta(base64 = it.data, mimeType = it.mimeType)) }
+                        parsed.candidates.firstOrNull()?.let { candidate ->
+                            candidate.content.parts.forEach { part ->
+                                part.text?.takeIf { it.isNotEmpty() }?.let {
+                                    contentReceived = true
+                                    emit(ChatEvent.ContentDelta(it))
+                                }
+                                part.inlineData?.let {
+                                    contentReceived = true
+                                    emit(ChatEvent.ImageDelta(base64 = it.data, mimeType = it.mimeType))
+                                }
+                            }
+                            candidate.finishReason?.let { finishReason = it.toFinishReason() }
+                        }
+                        parsed.usageMetadata?.let {
+                            usage = TokenUsage(it.promptTokenCount, it.candidatesTokenCount, it.totalTokenCount)
+                        }
                     }
-                    candidate.finishReason?.let { finishReason = it.toFinishReason() }
-                }
-                parsed.usageMetadata?.let {
-                    usage = TokenUsage(it.promptTokenCount, it.candidatesTokenCount, it.totalTokenCount)
+                    emit(ChatEvent.Completed(finishReason ?: FinishReason.STOP, usage))
+                    break
+                } catch (e: Exception) {
+                    if (contentReceived || attempt >= RetryPolicy.MAX_ATTEMPTS || !RetryPolicy.isRetryableThrowable(e)) throw e
+                    delay(RetryPolicy.backoffDelayMillis(attempt))
                 }
             }
-
-            emit(ChatEvent.Completed(finishReason ?: FinishReason.STOP, usage))
         } else {
-            val response = withContext(Dispatchers.IO) { httpClient.newCall(request).execute() }
+            val response = httpClient.executeWithRetry(request)
             val bodyText = try {
                 response.bodyOrThrow()
             } catch (e: ProviderHttpException) {
@@ -109,48 +132,55 @@ class GoogleGeminiProvider(
             emit(ChatEvent.Completed(candidate?.finishReason?.toFinishReason() ?: FinishReason.STOP, usage))
         }
     }.catch { e ->
-        val message = when (e) {
+        val rawMessage = when (e) {
             is SseException -> e.message ?: "Stream failed"
             else -> e.message ?: "Request failed"
         }
-        emit(ChatEvent.Error(message = message, cause = e, isRetryable = true))
+        val statusCode = e.httpStatusCodeOrNull()
+        emit(
+            ChatEvent.Error(
+                message = friendlyMessageFor(statusCode, rawMessage),
+                cause = e,
+                isRetryable = RetryPolicy.isRetryableThrowable(e),
+                httpStatusCode = statusCode,
+            ),
+        )
     }
 
     override suspend fun listModels(): Result<List<ModelInfo>> = runCatching {
-        withContext(Dispatchers.IO) {
-            val request = Request.Builder()
-                .url("$baseUrl/models")
-                .header("x-goog-api-key", apiKey)
-                .get()
-                .build()
+        val request = Request.Builder()
+            .url("$baseUrl/models")
+            .header("x-goog-api-key", apiKey)
+            .get()
+            .build()
 
-            val response = httpClient.newCall(request).execute()
-            val bodyText = try {
-                response.bodyOrThrow()
-            } catch (e: ProviderHttpException) {
-                throw e.toReadableException()
-            }
-
-            val parsed = ProviderJson.decodeFromString(GeminiModelsResponse.serializer(), bodyText)
-            parsed.models
-                .filter { it.supportedGenerationMethods.contains("generateContent") }
-                .map { model ->
-                    ModelInfo(
-                        providerId = ProviderId.GOOGLE,
-                        modelId = model.name.removePrefix("models/"),
-                        displayName = model.displayName,
-                        contextWindowTokens = model.inputTokenLimit,
-                        supportsStreaming = model.supportedGenerationMethods.contains("streamGenerateContent"),
-                        supportsImages = true,
-                    )
-                }
+        val response = httpClient.executeWithRetry(request)
+        val bodyText = try {
+            response.bodyOrThrow()
+        } catch (e: ProviderHttpException) {
+            throw e.toReadableException()
         }
+
+        val parsed = ProviderJson.decodeFromString(GeminiModelsResponse.serializer(), bodyText)
+        parsed.models
+            .filter { it.supportedGenerationMethods.contains("generateContent") }
+            .map { model ->
+                ModelInfo(
+                    providerId = ProviderId.GOOGLE,
+                    modelId = model.name.removePrefix("models/"),
+                    displayName = model.displayName,
+                    contextWindowTokens = model.inputTokenLimit,
+                    supportsStreaming = model.supportedGenerationMethods.contains("streamGenerateContent"),
+                    supportsImages = true,
+                )
+            }
     }
 
     override suspend fun testConnection(): Result<Unit> = listModels().map { }
 
     companion object {
         const val DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+        private const val JPEG_MIME_TYPE = "image/jpeg"
     }
 }
 

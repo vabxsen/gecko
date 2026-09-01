@@ -8,6 +8,7 @@ import com.gecko.core.model.chat.ChatMessage
 import com.gecko.core.model.chat.MessageRole
 import com.gecko.core.model.chat.MessageStatus
 import com.gecko.core.model.provider.ProviderId
+import com.gecko.domain.model.curatedForSelection
 import com.gecko.domain.repository.ConversationRepository
 import com.gecko.domain.repository.ProviderConfigRepository
 import com.gecko.domain.repository.UserPreferencesRepository
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -106,9 +108,25 @@ class ChatViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            val prefs = userPreferencesRepository.userPreferences.first()
-            selectedConfigId.value = prefs.defaultProviderConfigId
-            selectedModelId.value = prefs.defaultModelId
+            userPreferencesRepository.userPreferences.collectLatest { prefs ->
+                selectedConfigId.value = prefs.defaultProviderConfigId
+                selectedModelId.value = prefs.defaultModelId
+            }
+        }
+        viewModelScope.launch {
+            combine(providerConfigs, selectedConfigId, selectedModelId, availableModels) { configs, configId, modelId, models ->
+                val config = configs.find { it.id == configId } ?: return@combine null
+                val curated = models.curatedForSelection(config.providerId, config.baseUrlOverride)
+                val preferredModel = curated.primary.firstOrNull() ?: return@combine null
+                if (modelId in curated.primary.map { it.modelId }) null else config.id to preferredModel.modelId
+            }.collectLatest { replacement ->
+                replacement ?: return@collectLatest
+                val (configId, modelId) = replacement
+                selectedConfigId.value = configId
+                selectedModelId.value = modelId
+                userPreferencesRepository.setDefaultProviderConfig(configId)
+                userPreferencesRepository.setDefaultModel(modelId)
+            }
         }
     }
 
@@ -125,8 +143,9 @@ class ChatViewModel @Inject constructor(
     }
 
     fun sendMessage(text: String, attachmentImageBase64: String? = null) {
+        if (isGenerating.value) return
         val trimmed = text.trim()
-        if (trimmed.isEmpty()) return
+        if (trimmed.isEmpty() && attachmentImageBase64 == null) return
         val configId = selectedConfigId.value
         val modelId = selectedModelId.value
         if (configId == null || modelId == null) {
@@ -150,7 +169,7 @@ class ChatViewModel @Inject constructor(
                 attachmentImageBase64 = attachmentImageBase64,
             )
             conversationRepository.saveMessage(userMessage)
-            maybeAutoTitle(conversationId, history, trimmed)
+            maybeAutoTitle(conversationId, history, trimmed.ifBlank { "Image attachment" })
 
             runGeneration {
                 sendChatMessageUseCase(conversationId, configId, providerId, modelId, history + userMessage, streaming = uiState.value.streamingEnabled)
@@ -159,6 +178,7 @@ class ChatViewModel @Inject constructor(
     }
 
     fun regenerate() {
+        if (isGenerating.value) return
         val conversationId = currentConversationId.value ?: return
         val configId = selectedConfigId.value ?: return
         val modelId = selectedModelId.value ?: return
@@ -188,6 +208,7 @@ class ChatViewModel @Inject constructor(
     }
 
     fun submitEdit(newContent: String) {
+        if (isGenerating.value) return
         val trimmed = newContent.trim()
         if (trimmed.isEmpty()) return
         val messageId = editingMessageId.value ?: return
@@ -229,6 +250,11 @@ class ChatViewModel @Inject constructor(
 
     fun selectModel(modelId: String) {
         selectedModelId.value = modelId
+        val configId = selectedConfigId.value ?: return
+        viewModelScope.launch {
+            userPreferencesRepository.setDefaultProviderConfig(configId)
+            userPreferencesRepository.setDefaultModel(modelId)
+        }
     }
 
     fun dismissError() {

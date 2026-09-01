@@ -6,7 +6,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 internal data class AnthropicMessage(
     val role: String,
-    val content: String,
+    val content: List<AnthropicContentBlock>,
 )
 
 @Serializable
@@ -28,6 +28,14 @@ internal data class AnthropicUsage(
 internal data class AnthropicContentBlock(
     val type: String = "text",
     val text: String = "",
+    val source: AnthropicImageSource? = null,
+)
+
+@Serializable
+internal data class AnthropicImageSource(
+    val type: String = "base64",
+    @SerialName("media_type") val mediaType: String,
+    val data: String,
 )
 
 @Serializable

@@ -5,6 +5,7 @@ import com.gecko.core.model.chat.ChatMessage
 import com.gecko.core.model.provider.ModelInfo
 import com.gecko.core.model.provider.ProviderConfig
 import com.gecko.core.provider.api.ProviderFactory
+import com.gecko.domain.model.trimToContextBudget
 import com.gecko.domain.repository.ChatCompletionRepository
 import com.gecko.domain.repository.ProviderConfigRepository
 import com.gecko.domain.repository.SecureKeyRepository
@@ -37,7 +38,10 @@ class ChatCompletionRepositoryImpl @Inject constructor(
                 ),
             )
         }
-        return providerFactory.create(config.providerId, apiKey, config.baseUrlOverride).sendMessage(history, modelId, stream)
+        val contextWindowTokens = providerConfigRepository.observeModels(configId).first()
+            .find { it.modelId == modelId }?.contextWindowTokens
+        val budgetedHistory = history.trimToContextBudget(contextWindowTokens)
+        return providerFactory.create(config.providerId, apiKey, config.baseUrlOverride).sendMessage(budgetedHistory, modelId, stream)
     }
 
     override suspend fun testConnection(configId: String): Result<Unit> {

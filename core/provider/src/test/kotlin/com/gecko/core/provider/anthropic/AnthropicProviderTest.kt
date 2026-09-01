@@ -12,6 +12,7 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -80,6 +81,70 @@ class AnthropicProviderTest {
             assertEquals(TokenUsage(5, 3, 8), completed.usage)
             awaitComplete()
         }
+    }
+
+    @Test
+    fun attachedImageIsSentAsAnthropicImageBlock() = runTest {
+        server.enqueue(MockResponse().setBody("{\"content\":[]}").setHeader("Content-Type", "application/json"))
+
+        provider.sendMessage(listOf(userMessage("Describe this", attachmentImageBase64 = "aW1hZ2U=")), model = "claude-3-5-sonnet-20241022", stream = false).test {
+            awaitItem()
+            awaitItem()
+            awaitComplete()
+        }
+
+        val requestBody = server.takeRequest().body.readUtf8()
+        assertTrue(requestBody.contains("\"type\":\"image\""))
+        assertTrue(requestBody.contains("\"media_type\":\"image/jpeg\""))
+        assertTrue(requestBody.contains("\"data\":\"aW1hZ2U=\""))
+    }
+
+    @Test
+    fun maxTokensIsModelAware() = runTest {
+        server.enqueue(MockResponse().setBody("{\"content\":[]}").setHeader("Content-Type", "application/json"))
+        server.enqueue(MockResponse().setBody("{\"content\":[]}").setHeader("Content-Type", "application/json"))
+
+        provider.sendMessage(listOf(userMessage("Hi")), model = "claude-3-5-sonnet-20241022", stream = false).test {
+            awaitItem(); awaitItem(); awaitComplete()
+        }
+        provider.sendMessage(listOf(userMessage("Hi")), model = "claude-instant-1.2", stream = false).test {
+            awaitItem(); awaitItem(); awaitComplete()
+        }
+
+        assertTrue(server.takeRequest().body.readUtf8().contains("\"max_tokens\":8192"))
+        assertTrue(server.takeRequest().body.readUtf8().contains("\"max_tokens\":4096"))
+    }
+
+    @Test
+    fun nonStreamingRetriesOnServerErrorThenSucceeds() = runTest {
+        server.enqueue(MockResponse().setResponseCode(503).setBody("unavailable"))
+        server.enqueue(MockResponse().setBody("{\"content\":[{\"type\":\"text\",\"text\":\"Hi there\"}],\"stop_reason\":\"end_turn\"}").setHeader("Content-Type", "application/json"))
+
+        provider.sendMessage(listOf(userMessage("Hi")), model = "claude-3-5-sonnet-20241022", stream = false).test {
+            assertEquals(ChatEvent.Started(), awaitItem())
+            assertEquals(ChatEvent.ContentDelta("Hi there"), awaitItem())
+            awaitItem() as ChatEvent.Completed
+            awaitComplete()
+        }
+        assertEquals(2, server.requestCount)
+    }
+
+    @Test
+    fun nonStreamingDoesNotRetryNonRetryableStatus() = runTest {
+        server.enqueue(
+            MockResponse().setResponseCode(401)
+                .setBody("{\"error\":{\"message\":\"invalid x-api-key\"}}")
+                .setHeader("Content-Type", "application/json"),
+        )
+
+        provider.sendMessage(listOf(userMessage("Hi")), model = "claude-3-5-sonnet-20241022", stream = false).test {
+            assertEquals(ChatEvent.Started(), awaitItem())
+            val error = awaitItem() as ChatEvent.Error
+            assertFalse(error.isRetryable)
+            assertEquals(401, error.httpStatusCode)
+            awaitComplete()
+        }
+        assertEquals(1, server.requestCount)
     }
 
     @Test

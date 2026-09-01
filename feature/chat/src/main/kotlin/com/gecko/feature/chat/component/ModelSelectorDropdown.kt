@@ -124,7 +124,7 @@ fun ModelSelectorDropdown(
             } else if (modelsForSelectedProvider.isEmpty()) {
                 DropdownMenuItem(text = { Text("No models loaded yet") }, onClick = {}, enabled = false)
             } else {
-                val curated = modelsForSelectedProvider.curatedForSelection(provider.providerId)
+                val curated = modelsForSelectedProvider.curatedForSelection(provider.providerId, provider.baseUrlOverride)
                 curated.primary.forEach { model ->
                     DropdownMenuItem(
                         text = { Text(model.displayName) },
@@ -134,7 +134,7 @@ fun ModelSelectorDropdown(
                         },
                     )
                 }
-                if (curated.hasMore) {
+                if (curated.hasMore && !curated.curatedAllowlistOnly) {
                     DropdownMenuItem(
                         text = { Text(if (showAllModels) "Show fewer models" else "Show all ${curated.remainder.size} models") },
                         trailingIcon = {
