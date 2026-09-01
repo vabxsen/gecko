@@ -1,7 +1,5 @@
 package com.gecko.feature.chat.component
 
-import android.graphics.BitmapFactory
-import android.util.Base64
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -49,6 +47,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import com.gecko.core.designsystem.theme.GeckoMotion
@@ -260,12 +259,8 @@ private fun CopyActionIcon(text: String) {
 
 @Composable
 internal fun AttachedImage(base64: String, modifier: Modifier = Modifier) {
-    val bitmap = remember(base64) {
-        runCatching {
-            val bytes = Base64.decode(base64, Base64.NO_WRAP)
-            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-        }.getOrNull()
-    }
+    val maxDimensionPx = with(LocalDensity.current) { 240.dp.toPx() }.toInt()
+    val bitmap = rememberDecodedBitmap(base64, maxDimensionPx)
     if (bitmap != null) {
         Box(
             modifier = modifier

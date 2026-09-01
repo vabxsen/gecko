@@ -89,7 +89,14 @@ class AddProviderViewModel @Inject constructor(
                     if (providerId == ProviderId.OPENAI) {
                         providerConfigRepository.setBaseUrlOverride(id, baseUrlOverride)
                     }
-                    saveProviderApiKeyUseCase(id, key)
+                    val saveResult = runCatching { saveProviderApiKeyUseCase(id, key) }
+                    if (saveResult.isFailure) {
+                        providerConfigRepository.removeProvider(id)
+                        _uiState.update {
+                            it.copy(isSaving = false, errorMessage = "Couldn't securely store this key on this device.")
+                        }
+                        return@onSuccess
+                    }
 
                     testProviderConnectionUseCase(id)
                         .onSuccess {

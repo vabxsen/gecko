@@ -26,7 +26,7 @@ class ConversationRepositoryImpl @Inject constructor(
         conversationDao.observeAll().map { entities -> entities.map { it.toDomain() } }
 
     override fun searchConversations(query: String): Flow<List<Conversation>> =
-        conversationDao.search(query).map { entities -> entities.map { it.toDomain() } }
+        conversationDao.search(query.escapeLikeWildcards()).map { entities -> entities.map { it.toDomain() } }
 
     override suspend fun getConversation(id: String): Conversation? = withContext(dispatchers.io) {
         conversationDao.getById(id)?.toDomain()
@@ -83,3 +83,8 @@ class ConversationRepositoryImpl @Inject constructor(
         messageDao.deleteAfter(conversationId, after.toEpochMilli())
     }
 }
+
+/** Escapes SQL LIKE wildcards so a literal `%`/`_`/`\` in search text is matched literally
+ * rather than as a wildcard — paired with `ConversationDao.search`'s `ESCAPE '\'` clause. */
+private fun String.escapeLikeWildcards(): String =
+    replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")

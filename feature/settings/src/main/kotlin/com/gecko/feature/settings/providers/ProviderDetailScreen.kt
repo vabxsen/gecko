@@ -178,6 +178,14 @@ fun ProviderDetailScreen(
                             OutlinedButton(onClick = { viewModel.clearApiKey(); apiKeyInput = "" }) { Text("Remove") }
                         }
                     }
+                    uiState.saveKeyErrorMessage?.let { message ->
+                        Text(
+                            text = message,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
                 }
                 if (uiState.providerId == ProviderId.OPENAI) {
                     HorizontalDivider()

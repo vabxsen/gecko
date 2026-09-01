@@ -25,13 +25,14 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class, kotlinx.coroutines.FlowPreview::class)
 @HiltViewModel
 class ChatViewModel @Inject constructor(
     private val conversationRepository: ConversationRepository,
@@ -52,9 +53,11 @@ class ChatViewModel @Inject constructor(
 
     private var generationJob: Job? = null
 
-    private val conversations = searchQuery.flatMapLatest { query ->
-        if (query.isBlank()) conversationRepository.observeConversations() else conversationRepository.searchConversations(query)
-    }
+    private val conversations = searchQuery
+        .debounce { if (it.isBlank()) 0L else SEARCH_DEBOUNCE_MS }
+        .flatMapLatest { query ->
+            if (query.isBlank()) conversationRepository.observeConversations() else conversationRepository.searchConversations(query)
+        }
 
     private val messages = currentConversationId.flatMapLatest { id ->
         if (id == null) flowOf(emptyList()) else conversationRepository.observeMessages(id)
@@ -158,7 +161,16 @@ class ChatViewModel @Inject constructor(
             val conversationId = currentConversationId.value
                 ?: conversationRepository.createConversation(providerId, modelId).id.also { currentConversationId.value = it }
 
-            val history = conversationRepository.observeMessages(conversationId).first()
+            // uiState.messages is already this same reactive query's latest result for an
+            // existing, already-open conversation — reuse it instead of re-querying Room a
+            // second time (this history can carry large base64 image blobs on long chats). A
+            // brand-new conversation's id hasn't propagated through that reactive chain yet at
+            // this point, so it still needs a direct fetch (trivially cheap: empty history).
+            val history = if (uiState.value.currentConversationId == conversationId) {
+                uiState.value.messages
+            } else {
+                conversationRepository.observeMessages(conversationId).first()
+            }
             val userMessage = ChatMessage(
                 id = newId(),
                 conversationId = conversationId,
@@ -279,5 +291,9 @@ class ChatViewModel @Inject constructor(
         if (priorHistory.isNotEmpty()) return
         val title = firstUserText.lineSequence().first().take(60).ifBlank { "New chat" }
         conversationRepository.renameConversation(conversationId, title)
+    }
+
+    private companion object {
+        const val SEARCH_DEBOUNCE_MS = 250L
     }
 }

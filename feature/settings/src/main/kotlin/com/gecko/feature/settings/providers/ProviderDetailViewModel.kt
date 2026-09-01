@@ -31,6 +31,7 @@ data class ProviderDetailUiState(
     val isSavingKey: Boolean = false,
     val apiKeyValue: String? = null,
     val isApiKeyLoaded: Boolean = false,
+    val saveKeyErrorMessage: String? = null,
 ) {
     val providerId: ProviderId? get() = config?.providerId
     val label: String get() = config?.label.orEmpty()
@@ -60,6 +61,7 @@ class ProviderDetailViewModel @Inject constructor(
     // exposed as a reactive Flow — SecureKeyStore is a one-shot suspend read, not observable.
     private val apiKeyValue = MutableStateFlow<String?>(null)
     private val isApiKeyLoaded = MutableStateFlow(false)
+    private val saveKeyErrorMessage = MutableStateFlow<String?>(null)
 
     init {
         viewModelScope.launch {
@@ -73,8 +75,8 @@ class ProviderDetailViewModel @Inject constructor(
         providerConfigRepository.observeModels(id),
         isLoadingModels,
         isSavingKey,
-        combine(apiKeyValue, isApiKeyLoaded, ::Pair),
-    ) { config, models, loadingModels, savingKey, (keyValue, keyLoaded) ->
+        combine(apiKeyValue, isApiKeyLoaded, saveKeyErrorMessage, ::Triple),
+    ) { config, models, loadingModels, savingKey, (keyValue, keyLoaded, saveError) ->
         ProviderDetailUiState(
             id = id,
             config = config,
@@ -83,6 +85,7 @@ class ProviderDetailViewModel @Inject constructor(
             isSavingKey = savingKey,
             apiKeyValue = keyValue,
             isApiKeyLoaded = keyLoaded,
+            saveKeyErrorMessage = saveError,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProviderDetailUiState(id = id))
 
@@ -101,7 +104,13 @@ class ProviderDetailViewModel @Inject constructor(
         if (trimmed.isEmpty()) return
         viewModelScope.launch {
             isSavingKey.value = true
-            saveProviderApiKeyUseCase(id, trimmed)
+            saveKeyErrorMessage.value = null
+            val result = runCatching { saveProviderApiKeyUseCase(id, trimmed) }
+            if (result.isFailure) {
+                isSavingKey.value = false
+                saveKeyErrorMessage.value = "Couldn't securely store this key on this device."
+                return@launch
+            }
             apiKeyValue.value = trimmed
             isSavingKey.value = false
             // Result surfaces reactively as ConnectionStatus on uiState.connectionStatus, same as

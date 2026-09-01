@@ -1,10 +1,13 @@
 package com.gecko.core.data.repository
 
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import com.gecko.core.model.update.AppUpdate
 import com.gecko.domain.repository.UpdateRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
+import java.security.MessageDigest
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -33,8 +36,9 @@ class UpdateRepositoryImpl @Inject constructor(
                 }
                 val bodyText = response.body?.string().orEmpty()
                 val release = UpdateJson.decodeFromString(GithubReleaseDto.serializer(), bodyText)
-                val apkAsset = release.assets.firstOrNull { it.name.endsWith(".apk") }
+                val apkAsset = release.assets.firstOrNull { it.name.startsWith("gecko-") && it.name.endsWith(".apk") }
                     ?: error("Latest release has no APK asset attached")
+                require(apkAsset.downloadUrl.startsWith("https://")) { "Update download URL is not HTTPS" }
                 AppUpdate(
                     versionName = release.tagName.removePrefix("v"),
                     downloadUrl = apkAsset.downloadUrl,
@@ -46,8 +50,9 @@ class UpdateRepositoryImpl @Inject constructor(
 
     override suspend fun downloadApk(update: AppUpdate, onProgress: (Float) -> Unit): Result<File> = runCatching {
         withContext(Dispatchers.IO) {
+            require(update.downloadUrl.startsWith("https://")) { "Refusing to download an update over a non-HTTPS URL" }
             val request = Request.Builder().url(update.downloadUrl).get().build()
-            httpClient.newCall(request).execute().use { response ->
+            val outputFile = httpClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
                     error("Download failed: HTTP ${response.code}")
                 }
@@ -72,8 +77,51 @@ class UpdateRepositoryImpl @Inject constructor(
                 }
                 outputFile
             }
+
+            // The only network-independent guarantee that this file is a genuine Gecko build,
+            // not a tampered release asset — checked before ever prompting the user to install
+            // it, rather than relying solely on the OS installer's own signature check.
+            if (!signingCertificatesMatchInstalledApp(outputFile)) {
+                outputFile.delete()
+                error("Downloaded update's signature doesn't match this app's — refusing to install it.")
+            }
+            outputFile
         }
     }
+
+    private fun signingCertificatesMatchInstalledApp(apkFile: File): Boolean {
+        val installed = signingCertificateFingerprints(packageName = context.packageName)
+        val downloaded = signingCertificateFingerprints(archiveFilePath = apkFile.absolutePath)
+        return installed.isNotEmpty() && installed == downloaded
+    }
+
+    private fun signingCertificateFingerprints(packageName: String? = null, archiveFilePath: String? = null): Set<String> {
+        val pm = context.packageManager
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            PackageManager.GET_SIGNING_CERTIFICATES
+        } else {
+            @Suppress("DEPRECATION")
+            PackageManager.GET_SIGNATURES
+        }
+        val packageInfo = runCatching {
+            if (archiveFilePath != null) {
+                pm.getPackageArchiveInfo(archiveFilePath, flags)
+            } else {
+                pm.getPackageInfo(packageName!!, flags)
+            }
+        }.getOrNull() ?: return emptySet()
+
+        val certs = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            packageInfo.signingInfo?.apkContentsSigners?.toList().orEmpty()
+        } else {
+            @Suppress("DEPRECATION")
+            packageInfo.signatures?.toList().orEmpty()
+        }
+        return certs.map { sha256Hex(it.toByteArray()) }.toSet()
+    }
+
+    private fun sha256Hex(bytes: ByteArray): String =
+        MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 
     companion object {
         private const val GITHUB_OWNER = "vabxsen"

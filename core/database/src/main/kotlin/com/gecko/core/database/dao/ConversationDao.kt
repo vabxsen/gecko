@@ -11,8 +11,10 @@ interface ConversationDao {
     @Query("SELECT * FROM conversations ORDER BY pinned DESC, updatedAt DESC")
     fun observeAll(): Flow<List<ConversationEntity>>
 
+    /** [query] must already have `\`, `%`, and `_` escaped with a `\` prefix by the caller so
+     * those characters are matched literally instead of as LIKE wildcards. */
     @Query(
-        "SELECT * FROM conversations WHERE title LIKE '%' || :query || '%' " +
+        "SELECT * FROM conversations WHERE title LIKE '%' || :query || '%' ESCAPE '\\' " +
             "ORDER BY pinned DESC, updatedAt DESC",
     )
     fun search(query: String): Flow<List<ConversationEntity>>

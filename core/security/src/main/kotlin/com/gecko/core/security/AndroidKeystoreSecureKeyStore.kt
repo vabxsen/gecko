@@ -9,6 +9,7 @@ import android.util.Base64
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.security.GeneralSecurityException
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -38,15 +39,26 @@ class AndroidKeystoreSecureKeyStore(
         prefs().edit().putString(prefsKey(id), encoded).apply()
     }
 
+    /**
+     * A handful of OEM/AOSP-version Keystore bugs can leave a previously-created key alias
+     * present but unusable (e.g. invalidated silently across an OS update) — that must degrade
+     * to "no key available" rather than crash every screen that reads a key on load.
+     */
     override suspend fun getApiKey(id: String): String? = withContext(dispatcher) {
         val encoded = prefs().getString(prefsKey(id), null) ?: return@withContext null
         val combined = Base64.decode(encoded, Base64.NO_WRAP)
         if (combined.size <= IV_LENGTH_BYTES) return@withContext null
         val iv = combined.copyOfRange(0, IV_LENGTH_BYTES)
         val ciphertext = combined.copyOfRange(IV_LENGTH_BYTES, combined.size)
-        val cipher = Cipher.getInstance(TRANSFORMATION)
-        cipher.init(Cipher.DECRYPT_MODE, getOrCreateSecretKey(), GCMParameterSpec(GCM_TAG_LENGTH_BITS, iv))
-        String(cipher.doFinal(ciphertext), Charsets.UTF_8)
+        try {
+            val cipher = Cipher.getInstance(TRANSFORMATION)
+            cipher.init(Cipher.DECRYPT_MODE, getOrCreateSecretKey(), GCMParameterSpec(GCM_TAG_LENGTH_BITS, iv))
+            String(cipher.doFinal(ciphertext), Charsets.UTF_8)
+        } catch (e: GeneralSecurityException) {
+            null
+        } catch (e: IllegalStateException) {
+            null
+        }
     }
 
     override suspend fun clearApiKey(id: String) = withContext(dispatcher) {
