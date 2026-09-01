@@ -68,7 +68,7 @@ class ModelCurationTest {
         val curated = models.curatedForSelection(ProviderId.GOOGLE)
 
         assertEquals(
-            listOf("gemini-pro-latest", "gemini-flash-latest", "gemini-flash-lite-latest"),
+            listOf("gemini-pro-latest", "gemini-3.6-flash", "gemini-3.5-flash"),
             curated.primary.map { it.modelId },
         )
         assertEquals(true, curated.curatedAllowlistOnly)
@@ -90,7 +90,10 @@ class ModelCurationTest {
     }
 
     @Test
-    fun GeminiUsesStableVersionedModelsWhenLatestAliasesAreUnavailable() {
+    fun GeminiFallsBackThroughStableVersionsWhenNeitherLatestNorDatedFlashIsAvailable() {
+        // No -latest aliases and no 3.5/3.6 dated Flash ids — both Flash tiers must fall back,
+        // and since they'd otherwise collide on the same "gemini-2.5-flash" id, the second tier
+        // falls one step further to Flash-Lite so all three slots still resolve to distinct models.
         val models = listOf(
             "gemini-2.5-flash-lite",
             "gemini-2.5-flash",
@@ -107,6 +110,18 @@ class ModelCurationTest {
             ),
             curated.primary.map { it.modelId },
         )
+    }
+
+    @Test
+    fun GeminiFlashTiersNeverResolveToTheSameModelTwice() {
+        // Only one Flash generation exists in this catalog — the second Flash tier's fallback
+        // chain would otherwise re-resolve to the exact model the first tier already picked.
+        val models = listOf("gemini-pro-latest", "gemini-flash-latest").map(::model)
+
+        val curated = models.curatedForSelection(ProviderId.GOOGLE)
+
+        assertEquals(listOf("gemini-pro-latest", "gemini-flash-latest"), curated.primary.map { it.modelId })
+        assertEquals(curated.primary.size, curated.primary.map { it.modelId }.distinct().size)
     }
 
     @Test

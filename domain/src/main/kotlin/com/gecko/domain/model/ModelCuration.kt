@@ -22,13 +22,15 @@ data class CuratedModels(
 /**
  * Google's `/models` endpoint returns every product riding the `generateContent` method, not
  * just chat models: TTS, image generation, robotics, music, agent/research tools, and every
- * dated preview snapshot. Keep only one reliable Pro, Flash, and Flash-Lite option, preferring
- * Google's moving aliases with stable 2.5 fallbacks when an alias is unavailable.
+ * dated preview snapshot. The moving `-latest` aliases can land on a preview tier with a much
+ * tighter rate limit than the dated stable releases, so this prefers two specific dated Flash
+ * versions over the Flash alias (each with its own fallback chain for accounts that don't have
+ * that exact dated id yet).
  */
 private val GEMINI_PREFERRED_MODELS = listOf(
     listOf("gemini-pro-latest", "gemini-2.5-pro"),
-    listOf("gemini-flash-latest", "gemini-2.5-flash"),
-    listOf("gemini-flash-lite-latest", "gemini-2.5-flash-lite"),
+    listOf("gemini-3.6-flash", "gemini-flash-latest", "gemini-2.5-flash"),
+    listOf("gemini-3.5-flash", "gemini-flash-latest", "gemini-2.5-flash", "gemini-2.5-flash-lite"),
 )
 
 private val NVIDIA_NIM_PREFERRED_MODELS = listOf(
@@ -68,15 +70,20 @@ fun List<ModelInfo>.curatedForSelection(
 
 private fun List<ModelInfo>.curatedGeminiModels(): CuratedModels {
     val byId = associateBy { it.modelId }
+    // Tiers' fallback chains can overlap (two tiers both fall back to the same alias when their
+    // preferred dated id is missing) — track what's already been picked so the same model never
+    // fills two slots at once.
+    val picked = LinkedHashSet<String>()
     val primary = GEMINI_PREFERRED_MODELS.mapNotNull { candidates ->
-        candidates.firstNotNullOfOrNull(byId::get)
+        candidates.firstNotNullOfOrNull { id -> byId[id]?.takeIf { it.modelId !in picked } }
+            ?.also { picked += it.modelId }
     }
     // None of the preferred aliases/fallbacks are in this catalog (stale allowlist, unusual
     // region/tier) — degrade to the raw catalog rather than stranding the user with zero models.
     if (primary.isEmpty()) return CuratedModels(primary = this, remainder = emptyList())
     return CuratedModels(
         primary = primary,
-        remainder = filterNot { it.modelId in primary.map(ModelInfo::modelId).toSet() },
+        remainder = filterNot { it.modelId in picked },
         curatedAllowlistOnly = true,
     )
 }
