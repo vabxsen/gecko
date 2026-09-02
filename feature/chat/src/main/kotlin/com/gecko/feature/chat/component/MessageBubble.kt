@@ -51,7 +51,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import com.gecko.core.designsystem.theme.GeckoMotion
-import com.gecko.core.markdown.GeckoMarkdown
+import com.gecko.core.markdown.StreamingMarkdown
 import com.gecko.core.model.chat.ChatMessage
 import com.gecko.core.model.chat.MessageRole
 import com.gecko.core.model.chat.MessageStatus
@@ -59,6 +59,12 @@ import com.gecko.core.model.chat.MessageStatus
 @Composable
 fun MessageBubble(
     message: ChatMessage,
+    /**
+     * How much of [ChatMessage.content] to show. Equal to the full content for everything except
+     * a reply still being revealed word by word — see `rememberTypewriterText`, which is driven
+     * from [MessageList] so the list's auto-scroll can follow the same steps.
+     */
+    visibleContent: String,
     isEditing: Boolean,
     isLastAssistantMessage: Boolean,
     onBeginEdit: () -> Unit,
@@ -69,7 +75,7 @@ fun MessageBubble(
 ) {
     when (message.role) {
         MessageRole.USER -> UserMessage(message, isEditing, onBeginEdit, onSubmitEdit, onCancelEdit, modifier)
-        MessageRole.ASSISTANT -> AssistantMessage(message, isLastAssistantMessage, onRegenerate, modifier)
+        MessageRole.ASSISTANT -> AssistantMessage(message, visibleContent, isLastAssistantMessage, onRegenerate, modifier)
         MessageRole.SYSTEM -> Unit
     }
 }
@@ -131,10 +137,16 @@ private fun EditingBubble(initialText: String, onSubmit: (String) -> Unit, onCan
 @Composable
 private fun AssistantMessage(
     message: ChatMessage,
+    visibleText: String,
     isLastAssistantMessage: Boolean,
     onRegenerate: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // The reveal runs on for a moment past the end of the network stream, draining whatever text
+    // arrived in the last instant. Until it catches up the message is still visibly being
+    // written, so it keeps the streaming treatment: no action buttons, no "Stopped" label yet.
+    val stillTyping = message.status == MessageStatus.STREAMING || visibleText.length < message.content.length
+
     Column(modifier = modifier.fillMaxWidth()) {
         when {
             message.status == MessageStatus.ERROR -> {
@@ -153,13 +165,13 @@ private fun AssistantMessage(
                     )
                 }
             }
-            message.content.isEmpty() && message.generatedImageBase64 == null && message.status == MessageStatus.STREAMING -> {
+            visibleText.isEmpty() && message.generatedImageBase64 == null && stillTyping -> {
                 ThinkingIndicator()
             }
             else -> {
                 message.generatedImageBase64?.let { AttachedImage(it) }
-                GeckoMarkdown(content = message.content)
-                if (message.status == MessageStatus.STOPPED) {
+                StreamingMarkdown(content = visibleText, isStreaming = stillTyping)
+                if (message.status == MessageStatus.STOPPED && !stillTyping) {
                     Text(
                         text = "Stopped",
                         style = MaterialTheme.typography.labelMedium,
@@ -170,7 +182,7 @@ private fun AssistantMessage(
             }
         }
 
-        if (message.status != MessageStatus.STREAMING) {
+        if (!stillTyping) {
             MessageActionsRow(alignEnd = false) {
                 CopyActionIcon(text = message.content)
                 if (isLastAssistantMessage) {

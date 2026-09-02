@@ -220,7 +220,6 @@ private fun ChatContent(
                 MessageList(
                     messages = uiState.messages,
                     editingMessageId = uiState.editingMessageId,
-                    isGenerating = uiState.isGenerating,
                     onBeginEdit = viewModel::beginEdit,
                     onSubmitEdit = viewModel::submitEdit,
                     onCancelEdit = viewModel::cancelEdit,
