@@ -50,6 +50,7 @@ class ProviderConfigRepositoryImpl @Inject constructor(
                 baseUrlOverride = null,
                 connectionStatus = "UNTESTED",
                 connectionErrorMessage = null,
+                connectionErrorKind = null,
                 createdAt = System.currentTimeMillis(),
             ),
         )
@@ -70,10 +71,6 @@ class ProviderConfigRepositoryImpl @Inject constructor(
         updateConfig(id) { it.copy(enabled = enabled) }
     }
 
-    override suspend fun setSelectedModel(id: String, modelId: String?) = withContext(dispatchers.io) {
-        updateConfig(id) { it.copy(selectedModelId = modelId) }
-    }
-
     override suspend fun setBaseUrlOverride(id: String, baseUrl: String?) = withContext(dispatchers.io) {
         updateConfig(id) { it.copy(baseUrlOverride = baseUrl) }
     }
@@ -82,7 +79,8 @@ class ProviderConfigRepositoryImpl @Inject constructor(
         updateConfig(id) {
             it.copy(
                 connectionStatus = status.toWireString(),
-                connectionErrorMessage = (status as? ConnectionStatus.Failure)?.message,
+                connectionErrorMessage = (status as? ConnectionStatus.Failure)?.error?.technicalDetail,
+                connectionErrorKind = (status as? ConnectionStatus.Failure)?.error?.kind?.wireName,
             )
         }
     }
@@ -113,7 +111,6 @@ class ProviderConfigRepositoryImpl @Inject constructor(
             providerId = resolvedProviderId,
             label = label,
             enabled = enabled,
-            selectedModelId = selectedModelId,
             baseUrlOverride = baseUrlOverride,
             connectionStatus = toConnectionStatus(),
             hasApiKey = secureKeyRepository.hasApiKey(id),

@@ -39,6 +39,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.gecko.core.designsystem.icon.ProviderLogo
 import com.gecko.core.model.provider.ConnectionStatus
+import com.gecko.domain.error.copyForUser
 import com.gecko.core.model.provider.ProviderId
 import com.gecko.domain.model.friendlyName
 import com.gecko.feature.settings.component.ModelSelectorRow
@@ -296,7 +297,7 @@ private fun ConnectionStatusLabel(status: ConnectionStatus, modifier: Modifier =
         ConnectionStatus.Untested -> "Not tested" to MaterialTheme.colorScheme.onSurfaceVariant
         ConnectionStatus.Testing -> "Testing…" to MaterialTheme.colorScheme.onSurfaceVariant
         ConnectionStatus.Success -> "Connected" to MaterialTheme.colorScheme.primary
-        is ConnectionStatus.Failure -> status.message to MaterialTheme.colorScheme.error
+        is ConnectionStatus.Failure -> status.error.copyForUser().shortLabel to MaterialTheme.colorScheme.error
     }
     Text(text = text, style = MaterialTheme.typography.bodyMedium, color = color, modifier = modifier)
 }

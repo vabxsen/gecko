@@ -2,6 +2,8 @@ package com.gecko.feature.chat
 
 import app.cash.turbine.test
 import com.gecko.core.model.chat.ChatEvent
+import com.gecko.core.model.error.ErrorKind
+import com.gecko.core.model.error.GeckoError
 import com.gecko.core.model.chat.FinishReason
 import com.gecko.core.model.chat.MessageRole
 import com.gecko.core.model.chat.MessageStatus
@@ -131,9 +133,11 @@ class ChatViewModelTest {
     }
 
     @Test
-    fun errorEventSurfacesAsUiStateErrorMessage() = runTest {
+    fun errorEventSurfacesAsAnExplainableError() = runTest {
         val chatCompletionRepository = FakeChatCompletionRepository(
-            flowBuilder = { flow { emit(ChatEvent.Started()); emit(ChatEvent.Error("boom", null, true)) } },
+            flowBuilder = {
+                flow { emit(ChatEvent.Started()); emit(ChatEvent.Error(GeckoError(ErrorKind.RateLimited, "boom"))) }
+            },
         )
         val viewModel = buildViewModel(chatCompletionRepository = chatCompletionRepository)
         backgroundScope.launch { viewModel.uiState.collect {} }
@@ -142,10 +146,13 @@ class ChatViewModelTest {
         viewModel.sendMessage("Hello")
         advanceUntilIdle()
 
-        assertEquals("boom", viewModel.uiState.value.errorMessage)
+        // The kind is what drives the dialog's copy and its fix button, so it's the part that
+        // has to survive — the raw provider text is only supporting detail.
+        assertEquals(ErrorKind.RateLimited, viewModel.uiState.value.error?.kind)
+        assertEquals("boom", viewModel.uiState.value.error?.technicalDetail)
 
         viewModel.dismissError()
-        assertNull(viewModel.uiState.value.errorMessage)
+        assertNull(viewModel.uiState.value.error)
     }
 
     @Test

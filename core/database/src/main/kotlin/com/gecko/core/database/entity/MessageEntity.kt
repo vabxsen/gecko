@@ -32,4 +32,6 @@ data class MessageEntity(
     val errorMessage: String?,
     val attachmentImageBase64: String? = null,
     val generatedImageBase64: String? = null,
+    /** `ErrorKind.wireName`. Null on every row written before v4, and on every message that worked. */
+    val errorKind: String? = null,
 )

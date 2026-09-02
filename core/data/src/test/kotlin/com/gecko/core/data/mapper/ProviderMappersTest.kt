@@ -1,6 +1,8 @@
 package com.gecko.core.data.mapper
 
 import com.gecko.core.database.entity.ProviderConfigEntity
+import com.gecko.core.model.error.ErrorKind
+import com.gecko.core.model.error.GeckoError
 import com.gecko.core.model.provider.ConnectionStatus
 import com.gecko.core.model.provider.ModelInfo
 import com.gecko.core.model.provider.ProviderId
@@ -9,8 +11,10 @@ import org.junit.Test
 
 class ProviderMappersTest {
 
+    private val invalidKey = GeckoError(ErrorKind.InvalidApiKey, technicalDetail = "Invalid key")
+
     @Test
-    fun failureStatusRoundTripsWithMessage() {
+    fun failureStatusRoundTripsWithItsKindAndDetail() {
         val entity = ProviderConfigEntity(
             id = "config-1",
             providerId = ProviderId.OPENAI.slug,
@@ -18,12 +22,13 @@ class ProviderMappersTest {
             enabled = true,
             selectedModelId = "gpt-4o",
             baseUrlOverride = null,
-            connectionStatus = ConnectionStatus.Failure("Invalid key").toWireString(),
+            connectionStatus = ConnectionStatus.Failure(invalidKey).toWireString(),
             connectionErrorMessage = "Invalid key",
+            connectionErrorKind = ErrorKind.InvalidApiKey.wireName,
             createdAt = 0L,
         )
 
-        assertEquals(ConnectionStatus.Failure("Invalid key"), entity.toConnectionStatus())
+        assertEquals(ConnectionStatus.Failure(invalidKey), entity.toConnectionStatus())
     }
 
     @Test
@@ -37,6 +42,7 @@ class ProviderMappersTest {
             baseUrlOverride = null,
             connectionStatus = "SOMETHING_UNEXPECTED",
             connectionErrorMessage = null,
+            connectionErrorKind = null,
             createdAt = 0L,
         )
 

@@ -30,7 +30,6 @@ class FakeProviderConfigRepository : ProviderConfigRepository {
             providerId = providerId,
             label = label,
             enabled = true,
-            selectedModelId = null,
             baseUrlOverride = null,
             connectionStatus = ConnectionStatus.Untested,
             hasApiKey = false,
@@ -50,10 +49,6 @@ class FakeProviderConfigRepository : ProviderConfigRepository {
 
     override suspend fun setEnabled(id: String, enabled: Boolean) {
         updateConfig(id) { it.copy(enabled = enabled) }
-    }
-
-    override suspend fun setSelectedModel(id: String, modelId: String?) {
-        updateConfig(id) { it.copy(selectedModelId = modelId) }
     }
 
     override suspend fun setBaseUrlOverride(id: String, baseUrl: String?) {

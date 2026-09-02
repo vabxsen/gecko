@@ -35,6 +35,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.gecko.core.designsystem.icon.ProviderLogo
 import com.gecko.core.designsystem.theme.GeckoMotion
 import com.gecko.core.model.provider.ConnectionStatus
+import com.gecko.domain.error.copyForUser
 import com.gecko.core.model.provider.ProviderConfig
 import com.gecko.domain.repository.MAX_PROVIDER_CONFIGS
 import com.gecko.feature.settings.component.SettingsContentPadding
@@ -49,8 +50,8 @@ fun AiProvidersScreen(
     modifier: Modifier = Modifier,
     viewModel: AiProvidersViewModel = hiltViewModel(),
 ) {
-    val configs by viewModel.providerConfigs.collectAsStateWithLifecycle()
-    val canAddMore = configs.size < MAX_PROVIDER_CONFIGS
+    val rows by viewModel.uiState.collectAsStateWithLifecycle()
+    val canAddMore = rows.size < MAX_PROVIDER_CONFIGS
 
     Scaffold(
         modifier = modifier,
@@ -71,7 +72,7 @@ fun AiProvidersScreen(
             }
         },
     ) { innerPadding ->
-        if (configs.isEmpty()) {
+        if (rows.isEmpty()) {
             Text(
                 text = "No API keys yet. Add one to start chatting — bring your own key from OpenAI, Anthropic, Google, or OpenRouter.",
                 style = MaterialTheme.typography.bodyMedium,
@@ -85,11 +86,11 @@ fun AiProvidersScreen(
             modifier = Modifier.fillMaxSize().padding(innerPadding),
             contentPadding = SettingsContentPadding,
         ) {
-            items(configs, key = { it.id }) { config ->
+            items(rows, key = { it.config.id }) { row ->
                 ProviderRow(
-                    config = config,
-                    onClick = { onOpenProvider(config.id) },
-                    onToggleEnabled = { enabled -> viewModel.setEnabled(config.id, enabled) },
+                    row = row,
+                    onClick = { onOpenProvider(row.config.id) },
+                    onToggleEnabled = { enabled -> viewModel.setEnabled(row.config.id, enabled) },
                     modifier = Modifier.animateItem(),
                 )
             }
@@ -99,14 +100,17 @@ fun AiProvidersScreen(
 
 @Composable
 private fun ProviderRow(
-    config: ProviderConfig,
+    row: ProviderRowState,
     onClick: () -> Unit,
     onToggleEnabled: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val config = row.config
     SettingsRow(
         title = config.label.ifBlank { config.providerId.displayName },
-        subtitle = "${config.providerId.displayName} · ${statusLabel(config)}",
+        // The model leads: it's what someone opening this screen came to check, and it used to be
+        // on a different screen entirely.
+        subtitle = listOfNotNull(row.modelLabel, statusLabel(config)).joinToString(" · "),
         onClick = onClick,
         modifier = modifier,
         leading = {
@@ -120,6 +124,13 @@ private fun ProviderRow(
         },
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (row.isInUse) {
+                    Text(
+                        text = "In use",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
                 Switch(checked = config.enabled, onCheckedChange = onToggleEnabled)
                 Icon(
                     Icons.AutoMirrored.Filled.KeyboardArrowRight,
@@ -164,6 +175,7 @@ private fun statusLabel(config: ProviderConfig): String {
         ConnectionStatus.Untested -> "Not tested"
         ConnectionStatus.Testing -> "Testing…"
         ConnectionStatus.Success -> "Connected"
-        is ConnectionStatus.Failure -> status.message
+        // Two or three words. A raw provider message in a list-row subtitle is unreadable.
+        is ConnectionStatus.Failure -> status.error.copyForUser().shortLabel
     }
 }

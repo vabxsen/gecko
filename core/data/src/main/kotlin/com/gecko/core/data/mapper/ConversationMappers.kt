@@ -3,6 +3,7 @@ package com.gecko.core.data.mapper
 import com.gecko.core.database.entity.ConversationEntity
 import com.gecko.core.database.entity.MessageEntity
 import com.gecko.core.model.chat.ChatMessage
+import com.gecko.core.model.error.ErrorKind
 import com.gecko.core.model.chat.MessageRole
 import com.gecko.core.model.chat.MessageStatus
 import com.gecko.core.model.chat.TokenUsage
@@ -46,6 +47,7 @@ internal fun MessageEntity.toDomain(): ChatMessage = ChatMessage(
         if (prompt != null && completion != null && total != null) TokenUsage(prompt, completion, total) else null
     },
     errorMessage = errorMessage,
+    errorKind = ErrorKind.fromWireName(errorKind),
     attachmentImageBase64 = attachmentImageBase64,
     generatedImageBase64 = generatedImageBase64,
 )
@@ -63,6 +65,7 @@ internal fun ChatMessage.toEntity(): MessageEntity = MessageEntity(
     completionTokens = tokenUsage?.completionTokens,
     totalTokens = tokenUsage?.totalTokens,
     errorMessage = errorMessage,
+    errorKind = errorKind?.wireName,
     attachmentImageBase64 = attachmentImageBase64,
     generatedImageBase64 = generatedImageBase64,
 )

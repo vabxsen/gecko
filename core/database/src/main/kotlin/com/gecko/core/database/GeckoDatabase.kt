@@ -18,7 +18,7 @@ import com.gecko.core.database.entity.ProviderConfigEntity
         ProviderConfigEntity::class,
         ModelCatalogEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class GeckoDatabase : RoomDatabase() {

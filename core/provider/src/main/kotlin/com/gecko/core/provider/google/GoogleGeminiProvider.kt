@@ -10,13 +10,16 @@ import com.gecko.core.model.provider.ProviderId
 import com.gecko.core.network.sse.SseException
 import com.gecko.core.network.sse.streamSse
 import com.gecko.core.provider.api.AiProvider
+import com.gecko.core.provider.internal.EmptyProviderResponseException
+import com.gecko.core.model.error.GeckoException
 import com.gecko.core.provider.internal.ProviderHttpException
 import com.gecko.core.provider.internal.ProviderJson
+import com.gecko.core.provider.internal.ProviderReportedException
 import com.gecko.core.provider.internal.RetryPolicy
 import com.gecko.core.provider.internal.bodyOrThrow
+import com.gecko.core.provider.internal.classifyProviderError
 import com.gecko.core.provider.internal.executeWithRetry
-import com.gecko.core.provider.internal.friendlyMessageFor
-import com.gecko.core.provider.internal.httpStatusCodeOrNull
+import com.gecko.core.provider.internal.toGeckoError
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
@@ -87,9 +90,8 @@ class GoogleGeminiProvider(
                 try {
                     httpClient.streamSse(request).collect { event ->
                         if (event.data.isBlank()) return@collect
-                        val parsed = runCatching {
-                            ProviderJson.decodeFromString(GeminiGenerateContentResponse.serializer(), event.data)
-                        }.getOrNull() ?: return@collect
+                        val parsed = event.data.decodeResponseOrThrow() ?: return@collect
+                        parsed.throwIfRefused()
 
                         parsed.candidates.firstOrNull()?.let { candidate ->
                             candidate.content.parts.forEach { part ->
@@ -108,6 +110,7 @@ class GoogleGeminiProvider(
                             usage = TokenUsage(it.promptTokenCount, it.candidatesTokenCount, it.totalTokenCount)
                         }
                     }
+                    if (!contentReceived) throw EmptyProviderResponseException()
                     emit(ChatEvent.Completed(finishReason ?: FinishReason.STOP, usage))
                     break
                 } catch (e: Exception) {
@@ -123,46 +126,56 @@ class GoogleGeminiProvider(
                 throw e.toReadableException()
             }
             val parsed = ProviderJson.decodeFromString(GeminiGenerateContentResponse.serializer(), bodyText)
-            val candidate = parsed.candidates.firstOrNull()
-            candidate?.content?.parts?.forEach { part ->
-                part.text?.takeIf { it.isNotEmpty() }?.let { emit(ChatEvent.ContentDelta(it)) }
-                part.inlineData?.let { emit(ChatEvent.ImageDelta(base64 = it.data, mimeType = it.mimeType)) }
+            parsed.throwIfRefused()
+            val candidate = parsed.candidates.firstOrNull() ?: throw EmptyProviderResponseException()
+            var emittedAnything = false
+            candidate.content.parts.forEach { part ->
+                part.text?.takeIf { it.isNotEmpty() }?.let {
+                    emittedAnything = true
+                    emit(ChatEvent.ContentDelta(it))
+                }
+                part.inlineData?.let {
+                    emittedAnything = true
+                    emit(ChatEvent.ImageDelta(base64 = it.data, mimeType = it.mimeType))
+                }
             }
+            if (!emittedAnything) throw EmptyProviderResponseException()
             val usage = parsed.usageMetadata?.let { TokenUsage(it.promptTokenCount, it.candidatesTokenCount, it.totalTokenCount) }
-            emit(ChatEvent.Completed(candidate?.finishReason?.toFinishReason() ?: FinishReason.STOP, usage))
+            emit(ChatEvent.Completed(candidate.finishReason?.toFinishReason() ?: FinishReason.STOP, usage))
         }
     }.catch { e ->
-        val rawMessage = when (e) {
-            is SseException -> e.message ?: "Stream failed"
-            else -> e.message ?: "Request failed"
-        }
-        val statusCode = e.httpStatusCodeOrNull()
-        emit(
-            ChatEvent.Error(
-                message = friendlyMessageFor(statusCode, rawMessage),
-                cause = e,
-                isRetryable = RetryPolicy.isRetryableThrowable(e),
-                httpStatusCode = statusCode,
-            ),
-        )
+        emit(ChatEvent.Error(error = e.toGeckoError(), cause = e))
     }
 
     override suspend fun listModels(): Result<List<ModelInfo>> = runCatching {
-        val request = Request.Builder()
-            .url("$baseUrl/models")
-            .header("x-goog-api-key", apiKey)
-            .get()
-            .build()
+        val collected = mutableListOf<GeminiModel>()
+        var pageToken: String? = null
+        var page = 0
+        do {
+            val url = buildString {
+                append("$baseUrl/models?pageSize=$MODELS_PAGE_SIZE")
+                pageToken?.let { append("&pageToken=$it") }
+            }
+            val request = Request.Builder()
+                .url(url)
+                .header("x-goog-api-key", apiKey)
+                .get()
+                .build()
 
-        val response = httpClient.executeWithRetry(request)
-        val bodyText = try {
-            response.bodyOrThrow()
-        } catch (e: ProviderHttpException) {
-            throw e.toReadableException()
-        }
+            val response = httpClient.executeWithRetry(request)
+            val bodyText = try {
+                response.bodyOrThrow()
+            } catch (e: ProviderHttpException) {
+                throw e.toReadableException()
+            }
 
-        val parsed = ProviderJson.decodeFromString(GeminiModelsResponse.serializer(), bodyText)
-        parsed.models
+            val parsed = ProviderJson.decodeFromString(GeminiModelsResponse.serializer(), bodyText)
+            collected += parsed.models
+            pageToken = parsed.nextPageToken?.takeIf { it.isNotBlank() }
+            page++
+        } while (pageToken != null && page < MAX_MODEL_PAGES)
+
+        collected
             .filter { it.supportedGenerationMethods.contains("generateContent") }
             .map { model ->
                 ModelInfo(
@@ -181,8 +194,38 @@ class GoogleGeminiProvider(
     companion object {
         const val DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
         private const val JPEG_MIME_TYPE = "image/jpeg"
+        /** Google caps this at 1000; 200 keeps the whole catalog to a page or two in practice. */
+        private const val MODELS_PAGE_SIZE = 200
+        /** A guard against a malformed token looping forever, not an expected limit. */
+        private const val MAX_MODEL_PAGES = 10
     }
 }
+
+/**
+ * Decodes one `data:` frame, giving anything that isn't a generate-content response a second
+ * reading as a bare error object before discarding it. Dropping unrecognised frames outright is
+ * how a mid-stream failure used to end as a silent, empty reply.
+ */
+private fun String.decodeResponseOrThrow(): GeminiGenerateContentResponse? {
+    runCatching { ProviderJson.decodeFromString(GeminiGenerateContentResponse.serializer(), this) }
+        .getOrNull()
+        ?.let { return it }
+    runCatching { ProviderJson.decodeFromString(GeminiErrorResponse.serializer(), this) }
+        .getOrNull()
+        ?.error
+        ?.let { throw ProviderReportedException(code = null, message = it.message) }
+    return null
+}
+
+/** Raises the two ways Gemini says "no" inside a 200 response: an error object, or a blocked prompt. */
+private fun GeminiGenerateContentResponse.throwIfRefused() {
+    error?.let { throw ProviderReportedException(code = null, message = it.message) }
+    promptFeedback?.blockReason?.let {
+        throw ProviderReportedException(code = null, message = "$BLOCKED_PROMPT_PREFIX$it")
+    }
+}
+
+internal const val BLOCKED_PROMPT_PREFIX = "Blocked by Google's safety filters: "
 
 private fun String.toFinishReason(): FinishReason = when (this) {
     "STOP" -> FinishReason.STOP
@@ -191,9 +234,15 @@ private fun String.toFinishReason(): FinishReason = when (this) {
     else -> FinishReason.STOP
 }
 
-private fun ProviderHttpException.toReadableException(): Exception {
+private fun ProviderHttpException.toReadableException(): GeckoException {
     val parsedMessage = runCatching {
         ProviderJson.decodeFromString(GeminiErrorResponse.serializer(), message.orEmpty()).error?.message
     }.getOrNull()
-    return Exception(parsedMessage?.takeIf { it.isNotBlank() } ?: message, this)
+    return GeckoException(
+        classifyProviderError(
+            statusCode = code,
+            detail = parsedMessage?.takeIf { it.isNotBlank() } ?: message,
+            cause = this,
+        ),
+    )
 }

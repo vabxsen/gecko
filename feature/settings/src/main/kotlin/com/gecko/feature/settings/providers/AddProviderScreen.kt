@@ -29,6 +29,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.gecko.core.designsystem.component.GeckoErrorDialog
+import com.gecko.domain.error.copyForUser
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.gecko.core.designsystem.icon.ProviderLogo
 import com.gecko.core.model.provider.ProviderId
@@ -39,11 +41,26 @@ import com.gecko.feature.settings.component.SettingsTopBar
 @Composable
 fun AddProviderScreen(
     onBack: () -> Unit,
+    onSaved: (configId: String) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: AddProviderViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var keyVisible by remember { mutableStateOf(false) }
+
+    // A rejected key is worth stopping for and explaining — it used to be red text under the
+    // field carrying the provider's raw JSON.
+    uiState.error?.let { error ->
+        val copy = error.copyForUser()
+        GeckoErrorDialog(
+            title = copy.title,
+            explanation = copy.explanation,
+            fixLabel = null,
+            technicalDetail = error.technicalDetail,
+            onFix = viewModel::dismissError,
+            onDismiss = viewModel::dismissError,
+        )
+    }
 
     Scaffold(
         modifier = modifier,
@@ -106,20 +123,12 @@ fun AddProviderScreen(
                             }
                         },
                     )
-                    if (uiState.errorMessage != null) {
-                        Text(
-                            text = uiState.errorMessage.orEmpty(),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(top = 8.dp),
-                        )
-                    }
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp),
                         horizontalArrangement = Arrangement.End,
                     ) {
                         Button(
-                            onClick = { viewModel.save(onSaved = onBack) },
+                            onClick = { viewModel.save(onSaved = onSaved) },
                             enabled = uiState.canSave,
                         ) {
                             Text(if (uiState.isSaving) "Saving…" else "Save")

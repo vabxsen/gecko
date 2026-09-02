@@ -18,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.gecko.core.model.chat.ChatMessage
+import com.gecko.core.model.error.GeckoError
 import com.gecko.core.model.chat.MessageRole
 import com.gecko.core.model.chat.MessageStatus
 import kotlinx.coroutines.launch
@@ -30,6 +31,7 @@ fun MessageList(
     onSubmitEdit: (String) -> Unit,
     onCancelEdit: () -> Unit,
     onRegenerate: () -> Unit,
+    onShowError: (GeckoError) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
@@ -90,6 +92,7 @@ fun MessageList(
                     onSubmitEdit = onSubmitEdit,
                     onCancelEdit = onCancelEdit,
                     onRegenerate = onRegenerate,
+                    onShowError = onShowError,
                     // Deliberately no animateItem(): it animates every size change, so a bubble
                     // growing a word at a time spends the whole reply chasing its own last frame.
                     // Messages are only appended here, never reordered, so it earns nothing.

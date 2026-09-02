@@ -2,6 +2,7 @@ package com.gecko.core.data.repository
 
 import app.cash.turbine.test
 import com.gecko.core.model.chat.ChatEvent
+import com.gecko.core.model.error.ErrorKind
 import com.gecko.core.model.provider.ProviderId
 import com.gecko.core.provider.api.ProviderFactory
 import com.gecko.core.testing.fake.FakeProviderConfigRepository
@@ -44,10 +45,36 @@ class ChatCompletionRepositoryImplTest {
     fun sendMessageWithoutApiKeyEmitsErrorWithoutNetworkCall() = runTest {
         repository.sendMessage("missing-config", "gpt-4o", emptyList(), stream = true).test {
             val event = awaitItem() as ChatEvent.Error
-            assertFalse(event.isRetryable)
+            assertEquals(ErrorKind.KeyRemoved, event.error.kind)
             awaitComplete()
         }
         assertEquals(0, server.requestCount)
+    }
+
+    @Test
+    fun aSavedConfigWithNoKeyIsReportedAsNeedingOne() = runTest {
+        val id = providerConfigRepository.addProvider(ProviderId.OPENAI, "OpenAI").getOrThrow()
+
+        repository.sendMessage(id, "gpt-4o", emptyList(), stream = true).test {
+            val event = awaitItem() as ChatEvent.Error
+            assertEquals(ErrorKind.NoApiKey, event.error.kind)
+            awaitComplete()
+        }
+    }
+
+    @Test
+    fun aKeyThisDeviceCannotDecryptIsNotReportedAsAMissingKey() = runTest {
+        // Both look like "getApiKey returned null" from here, but they need opposite advice: one
+        // is "add a key", the other is "the key you already added can't be read any more".
+        val id = providerConfigRepository.addProvider(ProviderId.OPENAI, "OpenAI").getOrThrow()
+        secureKeyRepository.saveApiKey(id, "sk-real-key")
+        secureKeyRepository.simulateUndecryptable = true
+
+        repository.sendMessage(id, "gpt-4o", emptyList(), stream = true).test {
+            val event = awaitItem() as ChatEvent.Error
+            assertEquals(ErrorKind.UndecryptableKey, event.error.kind)
+            awaitComplete()
+        }
     }
 
     @Test

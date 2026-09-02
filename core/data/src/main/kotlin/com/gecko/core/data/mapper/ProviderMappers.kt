@@ -2,6 +2,8 @@ package com.gecko.core.data.mapper
 
 import com.gecko.core.database.entity.ModelCatalogEntity
 import com.gecko.core.database.entity.ProviderConfigEntity
+import com.gecko.core.model.error.ErrorKind
+import com.gecko.core.model.error.GeckoError
 import com.gecko.core.model.provider.ConnectionStatus
 import com.gecko.core.model.provider.ModelInfo
 import com.gecko.core.model.provider.ProviderId
@@ -17,7 +19,14 @@ internal fun ConnectionStatus.toWireString(): String = when (this) {
 internal fun ProviderConfigEntity.toConnectionStatus(): ConnectionStatus = when (connectionStatus) {
     "TESTING" -> ConnectionStatus.Testing
     "SUCCESS" -> ConnectionStatus.Success
-    "FAILURE" -> ConnectionStatus.Failure(connectionErrorMessage ?: "Connection failed")
+    // Rows written before v4 have no kind — Unknown still explains itself, which is more than the
+    // raw provider string they were showing did.
+    "FAILURE" -> ConnectionStatus.Failure(
+        GeckoError(
+            kind = ErrorKind.fromWireName(connectionErrorKind) ?: ErrorKind.Unknown,
+            technicalDetail = connectionErrorMessage,
+        ),
+    )
     else -> ConnectionStatus.Untested
 }
 

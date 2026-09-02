@@ -2,6 +2,7 @@ package com.gecko.feature.chat
 
 import com.gecko.core.model.chat.ChatMessage
 import com.gecko.core.model.conversation.Conversation
+import com.gecko.core.model.error.GeckoError
 import com.gecko.core.model.provider.ModelInfo
 import com.gecko.core.model.provider.ProviderConfig
 import com.gecko.domain.model.friendlyName
@@ -25,7 +26,8 @@ data class ChatUiState(
     /** Configs whose catalog is being fetched right now, so their picker rows can show a spinner. */
     val loadingModelConfigIds: Set<String> = emptySet(),
     val editingMessageId: String? = null,
-    val errorMessage: String? = null,
+    /** The failure worth interrupting the user about, or null. Drives the explanation dialog. */
+    val error: GeckoError? = null,
     val sendOnEnter: Boolean = true,
     val streamingEnabled: Boolean = true,
 ) {

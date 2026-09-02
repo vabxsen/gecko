@@ -18,8 +18,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.rememberDrawerState
@@ -37,6 +35,9 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.gecko.core.designsystem.theme.GeckoMotion
+import com.gecko.core.designsystem.component.GeckoErrorDialog
+import com.gecko.core.model.error.ErrorFix
+import com.gecko.domain.error.copyForUser
 import com.gecko.feature.chat.component.ChatTopBar
 import com.gecko.feature.chat.component.ConversationDrawerContent
 import com.gecko.feature.chat.component.EmptyChatState
@@ -57,15 +58,31 @@ fun ChatScreen(
     viewModel: ChatViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val snackbarHostState = remember { SnackbarHostState() }
     val isWideScreen = LocalConfiguration.current.screenWidthDp >= WIDE_SCREEN_BREAKPOINT_DP
+    // Hoisted out of ChatContent so an error dialog's "Choose a model" action can open it.
+    var modelPickerVisible by rememberSaveable { mutableStateOf(false) }
 
-    LaunchedEffect(uiState.errorMessage) {
-        val message = uiState.errorMessage
-        if (message != null) {
-            snackbarHostState.showSnackbar(message)
-            viewModel.dismissError()
-        }
+    // Replaces a snackbar that showed the provider's raw error text for four seconds and then
+    // destroyed it. A failure now stays on screen until it's read, and offers the fix.
+    uiState.error?.let { error ->
+        val copy = error.copyForUser()
+        GeckoErrorDialog(
+            title = copy.title,
+            explanation = copy.explanation,
+            fixLabel = copy.fixLabel,
+            technicalDetail = error.technicalDetail,
+            onDismiss = viewModel::dismissError,
+            onFix = {
+                viewModel.dismissError()
+                when (copy.fix) {
+                    ErrorFix.Retry -> viewModel.regenerate()
+                    ErrorFix.OpenProviderKey -> onOpenSettings()
+                    ErrorFix.PickAnotherModel -> modelPickerVisible = true
+                    ErrorFix.StartNewChat -> viewModel.startNewConversation()
+                    ErrorFix.None -> Unit
+                }
+            },
+        )
     }
 
     val drawerContent: @Composable () -> Unit = {
@@ -90,7 +107,9 @@ fun ChatScreen(
             ChatContent(
                 uiState = uiState,
                 viewModel = viewModel,
-                snackbarHostState = snackbarHostState,
+                modelPickerVisible = modelPickerVisible,
+                onShowModelPicker = { modelPickerVisible = true },
+                onHideModelPicker = { modelPickerVisible = false },
                 showMenuButton = false,
                 onOpenDrawer = {},
                 onOpenSettings = onOpenSettings,
@@ -135,7 +154,9 @@ fun ChatScreen(
             ChatContent(
                 uiState = uiState,
                 viewModel = viewModel,
-                snackbarHostState = snackbarHostState,
+                modelPickerVisible = modelPickerVisible,
+                onShowModelPicker = { modelPickerVisible = true },
+                onHideModelPicker = { modelPickerVisible = false },
                 showMenuButton = true,
                 onOpenDrawer = { scope.launch { drawerState.open() } },
                 onOpenSettings = onOpenSettings,
@@ -149,7 +170,9 @@ fun ChatScreen(
 private fun ChatContent(
     uiState: ChatUiState,
     viewModel: ChatViewModel,
-    snackbarHostState: SnackbarHostState,
+    modelPickerVisible: Boolean,
+    onShowModelPicker: () -> Unit,
+    onHideModelPicker: () -> Unit,
     showMenuButton: Boolean,
     onOpenDrawer: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -163,8 +186,6 @@ private fun ChatContent(
         targetValue = if (imeVisible) 12.dp else 32.dp,
         label = "composerBottomPadding",
     )
-    var modelPickerVisible by rememberSaveable { mutableStateOf(false) }
-
     if (modelPickerVisible) {
         ModelPickerSheet(
             providers = uiState.enabledProviders,
@@ -175,7 +196,7 @@ private fun ChatContent(
             onSelect = viewModel::selectModel,
             onLoadModels = { configId -> viewModel.loadModels(configId) },
             onOpenSettings = onOpenSettings,
-            onDismiss = { modelPickerVisible = false },
+            onDismiss = onHideModelPicker,
         )
     }
 
@@ -190,12 +211,11 @@ private fun ChatContent(
                     ModelSelectorChip(
                         selectedProvider = uiState.selectedProvider,
                         selectedModelLabel = uiState.selectedModelLabel,
-                        onClick = { modelPickerVisible = true },
+                        onClick = onShowModelPicker,
                     )
                 },
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
             MessageComposer(
                 isGenerating = uiState.isGenerating,
@@ -224,6 +244,7 @@ private fun ChatContent(
                     onSubmitEdit = viewModel::submitEdit,
                     onCancelEdit = viewModel::cancelEdit,
                     onRegenerate = viewModel::regenerate,
+                    onShowError = viewModel::showError,
                     modifier = Modifier.padding(innerPadding),
                 )
             }

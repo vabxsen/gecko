@@ -140,8 +140,8 @@ class AnthropicProviderTest {
         provider.sendMessage(listOf(userMessage("Hi")), model = "claude-3-5-sonnet-20241022", stream = false).test {
             assertEquals(ChatEvent.Started(), awaitItem())
             val error = awaitItem() as ChatEvent.Error
-            assertFalse(error.isRetryable)
-            assertEquals(401, error.httpStatusCode)
+            assertFalse(error.error.isRetryable)
+            assertEquals(401, error.error.httpStatusCode)
             awaitComplete()
         }
         assertEquals(1, server.requestCount)

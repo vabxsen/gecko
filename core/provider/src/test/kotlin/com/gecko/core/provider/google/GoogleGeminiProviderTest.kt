@@ -171,10 +171,15 @@ class GoogleGeminiProviderTest {
     @Test
     fun nonStreamingRetriesOnServerErrorThenSucceeds() = runTest {
         server.enqueue(MockResponse().setResponseCode(500).setBody("server error"))
-        server.enqueue(MockResponse().setBody("{\"candidates\":[]}").setHeader("Content-Type", "application/json"))
+        server.enqueue(
+            MockResponse()
+                .setBody("{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"Recovered\"}]}}]}")
+                .setHeader("Content-Type", "application/json"),
+        )
 
         provider.sendMessage(listOf(userMessage("Hi")), model = "gemini-2.5-flash", stream = false).test {
             awaitItem()
+            assertEquals("Recovered", (awaitItem() as ChatEvent.ContentDelta).text)
             awaitItem() as ChatEvent.Completed
             awaitComplete()
         }
@@ -192,8 +197,8 @@ class GoogleGeminiProviderTest {
         provider.sendMessage(listOf(userMessage("Hi")), model = "gemini-2.5-flash", stream = false).test {
             assertEquals(ChatEvent.Started(), awaitItem())
             val error = awaitItem() as ChatEvent.Error
-            assertEquals(false, error.isRetryable)
-            assertEquals(400, error.httpStatusCode)
+            assertEquals(false, error.error.isRetryable)
+            assertEquals(400, error.error.httpStatusCode)
             awaitComplete()
         }
         assertEquals(1, server.requestCount)

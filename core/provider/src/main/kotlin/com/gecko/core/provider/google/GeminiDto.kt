@@ -51,10 +51,22 @@ internal data class GeminiCandidate(
     val finishReason: String? = null,
 )
 
+/**
+ * [promptFeedback] is how Gemini reports that it refused the *prompt* — the response then carries
+ * no candidates at all, which used to render as an empty bubble with nothing to explain it.
+ * [error] appears when the API reports a failure inside an otherwise-normal 200 stream.
+ */
 @Serializable
 internal data class GeminiGenerateContentResponse(
     val candidates: List<GeminiCandidate> = emptyList(),
     val usageMetadata: GeminiUsageMetadata? = null,
+    val promptFeedback: GeminiPromptFeedback? = null,
+    val error: GeminiErrorDetail? = null,
+)
+
+@Serializable
+internal data class GeminiPromptFeedback(
+    val blockReason: String? = null,
 )
 
 @Serializable
@@ -65,9 +77,15 @@ internal data class GeminiModel(
     val supportedGenerationMethods: List<String> = emptyList(),
 )
 
+/**
+ * [nextPageToken] matters more than it looks: Google's ListModels returns 50 per page by default,
+ * and its catalog is comfortably longer than that. Ignoring the token silently truncated the list,
+ * which in turn made any curated model id living past the first page look like it didn't exist.
+ */
 @Serializable
 internal data class GeminiModelsResponse(
     val models: List<GeminiModel> = emptyList(),
+    val nextPageToken: String? = null,
 )
 
 @Serializable

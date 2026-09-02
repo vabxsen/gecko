@@ -2,6 +2,9 @@ package com.gecko.feature.settings.providers
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.gecko.core.model.error.ErrorKind
+import com.gecko.core.model.error.GeckoError
+import com.gecko.core.model.error.GeckoException
 import com.gecko.core.model.provider.ProviderId
 import com.gecko.domain.model.curatedForSelection
 import com.gecko.domain.repository.ProviderConfigRepository
@@ -34,7 +37,7 @@ data class AddProviderUiState(
     val apiKey: String = "",
     val baseUrlOverride: String = "",
     val isSaving: Boolean = false,
-    val errorMessage: String? = null,
+    val error: GeckoError? = null,
 ) {
     val canSave: Boolean get() = selectedProviderId != null && apiKey.isNotBlank() && !isSaving
 }
@@ -57,7 +60,7 @@ class AddProviderViewModel @Inject constructor(
                 selectedProviderId = option.providerId,
                 baseUrlOverride = option.baseUrl.orEmpty(),
                 label = if (it.labelManuallyEdited) it.label else option.label,
-                errorMessage = null,
+                error = null,
             )
         }
     }
@@ -70,18 +73,22 @@ class AddProviderViewModel @Inject constructor(
         _uiState.update { it.copy(apiKey = key) }
     }
 
+    fun dismissError() {
+        _uiState.update { it.copy(error = null) }
+    }
+
     fun updateBaseUrlOverride(url: String) {
         _uiState.update { it.copy(baseUrlOverride = url) }
     }
 
-    fun save(onSaved: () -> Unit) {
+    fun save(onSaved: (String) -> Unit) {
         val state = _uiState.value
         val providerId = state.selectedProviderId ?: return
         val key = state.apiKey.trim()
         if (key.isEmpty()) return
 
         viewModelScope.launch {
-            _uiState.update { it.copy(isSaving = true, errorMessage = null) }
+            _uiState.update { it.copy(isSaving = true, error = null) }
             val label = state.label.trim().ifBlank { providerId.displayName }
             val baseUrlOverride = state.baseUrlOverride.trim().ifBlank { null }
             providerConfigRepository.addProvider(providerId, label)
@@ -93,7 +100,13 @@ class AddProviderViewModel @Inject constructor(
                     if (saveResult.isFailure) {
                         providerConfigRepository.removeProvider(id)
                         _uiState.update {
-                            it.copy(isSaving = false, errorMessage = "Couldn't securely store this key on this device.")
+                            it.copy(
+                                isSaving = false,
+                                error = GeckoError(
+                                    ErrorKind.Unknown,
+                                    technicalDetail = "This device couldn't securely store the key.",
+                                ),
+                            )
                         }
                         return@onSuccess
                     }
@@ -103,20 +116,28 @@ class AddProviderViewModel @Inject constructor(
                             val models = refreshProviderModelsUseCase(id).getOrDefault(emptyList())
                             maybeAdoptAsDefault(id, providerId, models, baseUrlOverride)
                             _uiState.update { it.copy(isSaving = false) }
-                            onSaved()
+                            onSaved(id)
                         }
                         .onFailure { e ->
                             providerConfigRepository.removeProvider(id)
                             _uiState.update {
-                                it.copy(isSaving = false, errorMessage = e.message ?: "Couldn't connect with this key")
+                                it.copy(isSaving = false, error = e.asGeckoError(label))
                             }
                         }
                 }
                 .onFailure { e ->
-                    _uiState.update { it.copy(isSaving = false, errorMessage = e.message ?: "Couldn't save this key") }
+                    _uiState.update { it.copy(isSaving = false, error = e.asGeckoError(label)) }
                 }
         }
     }
+
+    /**
+     * Whatever the provider said, in the app's own vocabulary — so a rejected key reads the same
+     * here as it does mid-chat instead of dumping raw vendor JSON under the text field.
+     */
+    private fun Throwable.asGeckoError(providerLabel: String): GeckoError =
+        ((this as? GeckoException)?.error ?: GeckoError(ErrorKind.Unknown, technicalDetail = message))
+            .copy(providerLabel = providerLabel)
 
     /** The first key a user ever adds should just work in chat with no separate trip to Settings
      * — but never override a default the user already chose explicitly. */
@@ -128,7 +149,7 @@ class AddProviderViewModel @Inject constructor(
     ) {
         val hasDefault = userPreferencesRepository.userPreferences.first().defaultProviderConfigId != null
         if (hasDefault) return
-        val modelId = models.curatedForSelection(providerId, baseUrlOverride).primary.firstOrNull()?.modelId
+        val modelId = models.curatedForSelection(providerId, baseUrlOverride).defaultChoice?.modelId
             ?: models.firstOrNull()?.modelId
             ?: return
         userPreferencesRepository.setDefaultProviderConfig(configId)

@@ -17,6 +17,12 @@ internal object RetryPolicy {
 
     fun isRetryableThrowable(e: Throwable): Boolean = when (e) {
         is ProviderHttpException -> isRetryableStatus(e.code)
+        // The provider explained the failure in its own payload. Unless it named a transient
+        // status, an identical retry gets the identical answer — and burns quota doing it.
+        is ProviderReportedException -> isRetryableStatus(e.statusCode)
+        // Retrying tends to reproduce it, and three empty replies are a worse experience than one
+        // prompt error the user can act on.
+        is EmptyProviderResponseException -> false
         // No HTTP code at all means the connection itself failed (never got a response), which
         // is the same class of transient failure as a 5xx.
         is SseException -> e.httpCode?.let(::isRetryableStatus) ?: true

@@ -5,6 +5,9 @@ import javax.inject.Inject
 import com.gecko.core.common.util.newId
 import com.gecko.core.model.chat.ChatEvent
 import com.gecko.core.model.chat.ChatMessage
+import com.gecko.core.model.chat.FinishReason
+import com.gecko.core.model.error.ErrorKind
+import com.gecko.core.model.error.GeckoError
 import com.gecko.core.model.chat.MessageRole
 import com.gecko.core.model.chat.MessageStatus
 import com.gecko.core.model.chat.TokenUsage
@@ -54,7 +57,8 @@ class SendChatMessageUseCase @Inject constructor(
 
         val buffer = StringBuilder()
         var usage: TokenUsage? = null
-        var errorMessage: String? = null
+        var streamError: GeckoError? = null
+        var finishReason: FinishReason? = null
         var generatedImageBase64: String? = null
         var lastPersistedAtMs = 0L
 
@@ -108,16 +112,30 @@ class SendChatMessageUseCase @Inject constructor(
                             ),
                         )
                     }
-                    is ChatEvent.Completed -> usage = event.usage
-                    is ChatEvent.Error -> errorMessage = event.message
+                    is ChatEvent.Completed -> {
+                        usage = event.usage
+                        finishReason = event.finishReason
+                    }
+                    is ChatEvent.Error -> streamError = event.error
                     is ChatEvent.Started -> Unit
                 }
             }
             .onCompletion { cause ->
                 withContext(NonCancellable) {
+                    // Every provider computes a finish reason and, until now, nothing read it —
+                    // so a safety refusal and a mid-sentence cutoff both rendered as an ordinary
+                    // reply that happened to be empty or to stop abruptly, with nothing to say why.
+                    val error = streamError ?: when {
+                        finishReason == FinishReason.CONTENT_FILTER -> GeckoError(ErrorKind.SafetyBlocked)
+                        finishReason == FinishReason.LENGTH -> GeckoError(ErrorKind.Truncated)
+                        else -> null
+                    }
                     val status = when {
                         cause is CancellationException -> MessageStatus.STOPPED
-                        cause != null || errorMessage != null -> MessageStatus.ERROR
+                        // A truncated answer is still a real answer — marking it failed would
+                        // throw away text the user can read and act on.
+                        error != null && error.kind != ErrorKind.Truncated -> MessageStatus.ERROR
+                        cause != null -> MessageStatus.ERROR
                         else -> MessageStatus.COMPLETE
                     }
                     conversationRepository.saveMessage(
@@ -131,7 +149,9 @@ class SendChatMessageUseCase @Inject constructor(
                             providerId = providerId,
                             modelId = modelId,
                             tokenUsage = usage,
-                            errorMessage = errorMessage ?: cause?.takeIf { it !is CancellationException }?.message,
+                            errorMessage = error?.technicalDetail
+                                ?: cause?.takeIf { it !is CancellationException }?.message,
+                            errorKind = error?.kind,
                             generatedImageBase64 = generatedImageBase64,
                         ),
                     )

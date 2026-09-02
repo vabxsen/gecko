@@ -2,6 +2,9 @@ package com.gecko.feature.settings.providers
 
 import com.gecko.core.model.preferences.UserPreferences
 import com.gecko.core.model.provider.ModelInfo
+import com.gecko.core.model.error.ErrorKind
+import com.gecko.core.model.error.GeckoError
+import com.gecko.core.model.error.GeckoException
 import com.gecko.core.model.provider.ProviderId
 import com.gecko.core.testing.fake.FakeChatCompletionRepository
 import com.gecko.core.testing.fake.FakeProviderConfigRepository
@@ -145,7 +148,10 @@ class AddProviderViewModelTest {
     fun savingAKeyThatFailsTheConnectionTestRollsBackAndSurfacesTheFailure() = runTest {
         val providerConfigRepository = FakeProviderConfigRepository()
         val chatCompletionRepository = FakeChatCompletionRepository(
-            testConnectionResult = Result.failure(IllegalStateException("Invalid API key")),
+            // What the real path produces: the provider classifies the failure before it gets here.
+            testConnectionResult = Result.failure(
+                GeckoException(GeckoError(ErrorKind.InvalidApiKey, technicalDetail = "Invalid API key")),
+            ),
         )
         val viewModel = viewModel(providerConfigRepository, chatCompletionRepository = chatCompletionRepository)
         var saved = false
@@ -156,7 +162,9 @@ class AddProviderViewModelTest {
         advanceUntilIdle()
 
         assertTrue(providerConfigRepository.observeAll().first().isEmpty())
-        assertEquals("Invalid API key", viewModel.uiState.value.errorMessage)
+        // Classified, not just echoed — the dialog needs the kind to know which fix to offer.
+        assertEquals(ErrorKind.InvalidApiKey, viewModel.uiState.value.error?.kind)
+        assertEquals("Invalid API key", viewModel.uiState.value.error?.technicalDetail)
         assertEquals(false, viewModel.uiState.value.isSaving)
         assertEquals(false, saved)
     }

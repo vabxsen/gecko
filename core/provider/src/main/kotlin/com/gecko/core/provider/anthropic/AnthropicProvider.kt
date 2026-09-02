@@ -10,13 +10,16 @@ import com.gecko.core.model.provider.ProviderId
 import com.gecko.core.network.sse.SseException
 import com.gecko.core.network.sse.streamSse
 import com.gecko.core.provider.api.AiProvider
+import com.gecko.core.provider.internal.EmptyProviderResponseException
+import com.gecko.core.model.error.GeckoException
 import com.gecko.core.provider.internal.ProviderHttpException
 import com.gecko.core.provider.internal.ProviderJson
+import com.gecko.core.provider.internal.ProviderReportedException
 import com.gecko.core.provider.internal.RetryPolicy
 import com.gecko.core.provider.internal.bodyOrThrow
+import com.gecko.core.provider.internal.classifyProviderError
 import com.gecko.core.provider.internal.executeWithRetry
-import com.gecko.core.provider.internal.friendlyMessageFor
-import com.gecko.core.provider.internal.httpStatusCodeOrNull
+import com.gecko.core.provider.internal.toGeckoError
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
@@ -82,7 +85,6 @@ class AnthropicProvider(
                 var inputTokens = 0
                 var outputTokens = 0
                 var finishReason: FinishReason? = null
-                var hadError = false
                 try {
                     httpClient.streamSse(request).collect { event ->
                         if (event.data.isBlank()) return@collect
@@ -101,22 +103,19 @@ class AnthropicProvider(
                                 parsed.delta?.stopReason?.let { finishReason = it.toFinishReason() }
                                 parsed.usage?.let { outputTokens = it.outputTokens }
                             }
-                            "error" -> {
-                                hadError = true
-                                val rawMessage = parsed.error?.message?.takeIf { it.isNotBlank() } ?: "Anthropic stream error"
-                                emit(
-                                    ChatEvent.Error(
-                                        message = friendlyMessageFor(null, rawMessage),
-                                        cause = null,
-                                        isRetryable = false,
-                                    ),
-                                )
-                            }
+                            // Thrown rather than emitted so it lands in the same terminal catch as
+                            // every other failure: emitting an Error inline built a second, subtly
+                            // different error path that lost the status code and could never be
+                            // classified or retried like the rest.
+                            "error" -> throw ProviderReportedException(
+                                code = null,
+                                message = parsed.error?.message?.takeIf { it.isNotBlank() }
+                                    ?: "Anthropic reported an error.",
+                            )
                         }
                     }
-                    if (!hadError) {
-                        emit(ChatEvent.Completed(finishReason ?: FinishReason.STOP, TokenUsage(inputTokens, outputTokens, inputTokens + outputTokens)))
-                    }
+                    if (!contentReceived) throw EmptyProviderResponseException()
+                    emit(ChatEvent.Completed(finishReason ?: FinishReason.STOP, TokenUsage(inputTokens, outputTokens, inputTokens + outputTokens)))
                     break
                 } catch (e: Exception) {
                     if (contentReceived || attempt >= RetryPolicy.MAX_ATTEMPTS || !RetryPolicy.isRetryableThrowable(e)) throw e
@@ -132,24 +131,13 @@ class AnthropicProvider(
             }
             val parsed = ProviderJson.decodeFromString(AnthropicResponse.serializer(), bodyText)
             val text = parsed.content.firstOrNull { it.type == "text" }?.text
-            if (!text.isNullOrEmpty()) emit(ChatEvent.ContentDelta(text))
+            if (text.isNullOrEmpty()) throw EmptyProviderResponseException()
+            emit(ChatEvent.ContentDelta(text))
             val usage = parsed.usage?.let { TokenUsage(it.inputTokens, it.outputTokens, it.inputTokens + it.outputTokens) }
             emit(ChatEvent.Completed(parsed.stopReason?.toFinishReason() ?: FinishReason.STOP, usage))
         }
     }.catch { e ->
-        val rawMessage = when (e) {
-            is SseException -> e.message ?: "Stream failed"
-            else -> e.message ?: "Request failed"
-        }
-        val statusCode = e.httpStatusCodeOrNull()
-        emit(
-            ChatEvent.Error(
-                message = friendlyMessageFor(statusCode, rawMessage),
-                cause = e,
-                isRetryable = RetryPolicy.isRetryableThrowable(e),
-                httpStatusCode = statusCode,
-            ),
-        )
+        emit(ChatEvent.Error(error = e.toGeckoError(), cause = e))
     }
 
     override suspend fun listModels(): Result<List<ModelInfo>> = runCatching {
@@ -198,9 +186,15 @@ private fun String.toFinishReason(): FinishReason = when (this) {
     else -> FinishReason.STOP
 }
 
-private fun ProviderHttpException.toReadableException(): Exception {
+private fun ProviderHttpException.toReadableException(): GeckoException {
     val parsedMessage = runCatching {
         ProviderJson.decodeFromString(AnthropicErrorResponse.serializer(), message.orEmpty()).error?.message
     }.getOrNull()
-    return Exception(parsedMessage?.takeIf { it.isNotBlank() } ?: message, this)
+    return GeckoException(
+        classifyProviderError(
+            statusCode = code,
+            detail = parsedMessage?.takeIf { it.isNotBlank() } ?: message,
+            cause = this,
+        ),
+    )
 }

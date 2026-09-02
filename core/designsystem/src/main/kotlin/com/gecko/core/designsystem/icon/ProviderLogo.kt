@@ -14,6 +14,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.gecko.core.designsystem.R
+import com.gecko.core.model.provider.ProviderFlavor
 import com.gecko.core.model.provider.ProviderId
 
 /**
@@ -22,24 +23,23 @@ import com.gecko.core.model.provider.ProviderId
  * generic icon for everything.
  *
  * [ProviderId.OPENAI] alone covers four different brands (OpenAI itself, DeepSeek, Kimi, NVIDIA
- * NIM) that all speak the OpenAI-compatible protocol through [baseUrlOverride] — so the OpenAI
- * branch below disambiguates by matching known host fragments from
- * `feature/settings/providers/OpenAiCompatibleEndpoints.kt`'s preset base URLs. An unrecognized
- * custom base URL (a user's own OpenAI-compatible server) falls back to the plain OpenAI mark,
- * since that's the protocol actually being spoken.
+ * NIM) that all speak the OpenAI-compatible protocol through [baseUrlOverride], so the brand is
+ * resolved through [ProviderFlavor] — the same answer the curated model shortlist uses, so a key's
+ * logo and its shortlist can never disagree about what service it is. An unrecognized custom base
+ * URL (a user's own OpenAI-compatible server) falls back to the plain OpenAI mark, since that's
+ * the protocol actually being spoken.
  */
 @DrawableRes
-fun providerLogoRes(providerId: ProviderId, baseUrlOverride: String?): Int = when (providerId) {
-    ProviderId.ANTHROPIC -> R.drawable.ic_provider_anthropic
-    ProviderId.GOOGLE -> R.drawable.ic_provider_google
-    ProviderId.OPENROUTER -> R.drawable.ic_provider_openrouter
-    ProviderId.OPENAI -> when {
-        baseUrlOverride?.contains("deepseek", ignoreCase = true) == true -> R.drawable.ic_provider_deepseek
-        baseUrlOverride?.contains("moonshot", ignoreCase = true) == true -> R.drawable.ic_provider_kimi
-        baseUrlOverride?.contains("nvidia", ignoreCase = true) == true -> R.drawable.ic_provider_nvidia
-        else -> R.drawable.ic_provider_openai
+fun providerLogoRes(providerId: ProviderId, baseUrlOverride: String?): Int =
+    when (ProviderFlavor.of(providerId, baseUrlOverride)) {
+        ProviderFlavor.Anthropic -> R.drawable.ic_provider_anthropic
+        ProviderFlavor.Google -> R.drawable.ic_provider_google
+        ProviderFlavor.OpenRouter -> R.drawable.ic_provider_openrouter
+        ProviderFlavor.DeepSeek -> R.drawable.ic_provider_deepseek
+        ProviderFlavor.Kimi -> R.drawable.ic_provider_kimi
+        ProviderFlavor.NvidiaNim -> R.drawable.ic_provider_nvidia
+        ProviderFlavor.OpenAi, ProviderFlavor.CustomOpenAiCompatible -> R.drawable.ic_provider_openai
     }
-}
 
 /** A provider's real brand mark on a neutral circular chip, sized consistently regardless of
  * each logo's own natural proportions (NVIDIA's fills its bounds, Gemini's four-pointed star

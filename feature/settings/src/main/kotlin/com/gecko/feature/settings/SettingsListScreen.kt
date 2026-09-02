@@ -11,7 +11,6 @@ import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.PrivacyTip
 import androidx.compose.material.icons.outlined.SmartToy
 import androidx.compose.material.icons.outlined.Tune
-import androidx.compose.material.icons.outlined.Widgets
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -47,7 +46,6 @@ fun SettingsListScreen(
     onNavigateAppearance: () -> Unit,
     onNavigateChatPreferences: () -> Unit,
     onNavigateAiProviders: () -> Unit,
-    onNavigateModelPreferences: () -> Unit,
     onNavigateDataPrivacy: () -> Unit,
     onNavigateAbout: () -> Unit,
     modifier: Modifier = Modifier,
@@ -82,9 +80,11 @@ fun SettingsListScreen(
             SettingsDestination("Appearance", "Theme and color", Icons.Outlined.Palette, onNavigateAppearance),
             SettingsDestination("Chat preferences", "Sending and streaming behavior", Icons.Outlined.Tune, onNavigateChatPreferences),
         )
+        // One entry, not two. Keys and the model you chat with were split across "AI Providers"
+        // and "Model preferences" — two menu items for one decision, where only the second one
+        // actually changed anything.
         val ai = listOf(
-            SettingsDestination("AI Providers", "API keys and connections", Icons.Outlined.SmartToy, onNavigateAiProviders),
-            SettingsDestination("Model preferences", "Default provider and model", Icons.Outlined.Widgets, onNavigateModelPreferences),
+            SettingsDestination("AI Providers", "API keys and the model you chat with", Icons.Outlined.SmartToy, onNavigateAiProviders),
         )
         val other = listOf(
             SettingsDestination("Data & Privacy", "Export and clear local data", Icons.Outlined.PrivacyTip, onNavigateDataPrivacy),

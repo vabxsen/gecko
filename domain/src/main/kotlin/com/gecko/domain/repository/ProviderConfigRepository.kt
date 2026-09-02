@@ -18,7 +18,6 @@ interface ProviderConfigRepository {
     suspend fun removeProvider(id: String)
     suspend fun setLabel(id: String, label: String)
     suspend fun setEnabled(id: String, enabled: Boolean)
-    suspend fun setSelectedModel(id: String, modelId: String?)
     suspend fun setBaseUrlOverride(id: String, baseUrl: String?)
     suspend fun setConnectionStatus(id: String, status: ConnectionStatus)
 

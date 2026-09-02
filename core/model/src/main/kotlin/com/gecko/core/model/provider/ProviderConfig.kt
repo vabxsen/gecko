@@ -5,7 +5,6 @@ data class ProviderConfig(
     val providerId: ProviderId,
     val label: String,
     val enabled: Boolean,
-    val selectedModelId: String?,
     val baseUrlOverride: String?,
     val connectionStatus: ConnectionStatus,
     val hasApiKey: Boolean,

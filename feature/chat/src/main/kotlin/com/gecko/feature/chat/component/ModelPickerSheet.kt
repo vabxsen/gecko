@@ -271,7 +271,9 @@ private fun SheetHeader(providerCount: Int, modelCount: Int) {
             text = when {
                 providerCount == 0 -> "Gecko chats through an AI provider's API key."
                 modelCount == 0 -> "Loading the models your saved keys can use…"
-                else -> "$modelCount models from your saved API keys. You can switch at any time."
+                // Deliberately not a count. Announcing "39 models" advertises the exact pile the
+                // shortlist exists to hide, and it's not something anyone needs to know.
+                else -> "Pick the one you want to chat with. You can switch at any time."
             },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,

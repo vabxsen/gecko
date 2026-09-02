@@ -30,7 +30,7 @@ class GeckoDatabaseMigrationTest {
             close()
         }
 
-        helper.runMigrationsAndValidate(DATABASE_NAME, 3, true, *GeckoDatabaseMigrations.ALL).use { database ->
+        helper.runMigrationsAndValidate(DATABASE_NAME, 4, true, *GeckoDatabaseMigrations.ALL).use { database ->
             database.query("SELECT title FROM conversations WHERE id = 'conversation-1'").use { cursor ->
                 assertTrue(cursor.moveToFirst())
                 assertEquals("Saved chat", cursor.getString(0))
@@ -47,6 +47,51 @@ class GeckoDatabaseMigrationTest {
             database.query("SELECT generatedImageBase64 FROM messages WHERE id = 'message-1'").use { cursor ->
                 assertTrue(cursor.moveToFirst())
                 assertTrue(cursor.isNull(0))
+            }
+            // v4's columns exist and are null on rows written before them — a message that
+            // succeeded long ago must not come back looking like it failed.
+            database.query("SELECT errorKind FROM messages WHERE id = 'message-1'").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertTrue(cursor.isNull(0))
+            }
+            database.query("SELECT connectionErrorKind FROM provider_configs WHERE id = 'openai'").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertTrue(cursor.isNull(0))
+            }
+        }
+    }
+
+    /**
+     * The upgrade every existing install will actually take. v1 is the deep history; this is the
+     * one that ships, and the one where a mistake loses someone's chats.
+     */
+    @Test
+    fun migratesVersionThreeWithoutLosingChats() {
+        helper.createDatabase(DATABASE_NAME, 3).apply {
+            execSQL("INSERT INTO conversations VALUES ('conversation-1', 'Existing chat', 1, 2, 0, 'openai', 'gpt-4o')")
+            execSQL(
+                "INSERT INTO messages VALUES ('message-1', 'conversation-1', 'ASSISTANT', 'An answer', " +
+                    "1, 'COMPLETE', 'openai', 'gpt-4o', NULL, NULL, NULL, NULL, NULL, NULL)",
+            )
+            execSQL(
+                "INSERT INTO provider_configs VALUES ('config-1', 'openai', 'My key', 1, 'gpt-4o', " +
+                    "NULL, 'SUCCESS', NULL, 0)",
+            )
+            close()
+        }
+
+        helper.runMigrationsAndValidate(DATABASE_NAME, 4, true, *GeckoDatabaseMigrations.ALL).use { database ->
+            database.query("SELECT content, errorKind FROM messages WHERE id = 'message-1'").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("An answer", cursor.getString(0))
+                assertTrue(cursor.isNull(1))
+            }
+            // The saved key's row must survive intact: API keys are stored against this id, so
+            // losing or renaming it orphans the key itself.
+            database.query("SELECT label, connectionErrorKind FROM provider_configs WHERE id = 'config-1'").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("My key", cursor.getString(0))
+                assertTrue(cursor.isNull(1))
             }
         }
     }

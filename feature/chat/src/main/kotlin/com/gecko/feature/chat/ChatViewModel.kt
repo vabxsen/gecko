@@ -4,6 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.gecko.core.common.util.newId
 import com.gecko.core.model.chat.ChatEvent
+import com.gecko.core.model.error.ErrorKind
+import com.gecko.core.model.error.GeckoError
+import com.gecko.core.model.error.GeckoException
 import com.gecko.core.model.chat.ChatMessage
 import com.gecko.core.model.chat.MessageRole
 import com.gecko.core.model.chat.MessageStatus
@@ -55,7 +58,12 @@ class ChatViewModel @Inject constructor(
     private val selectedConfigId = MutableStateFlow<String?>(null)
     private val selectedModelId = MutableStateFlow<String?>(null)
     private val editingMessageId = MutableStateFlow<String?>(null)
-    private val errorMessage = MutableStateFlow<String?>(null)
+    /**
+     * The failure currently worth interrupting someone about. Holds the whole [GeckoError] rather
+     * than its message: the kind is what decides the dialog copy and which fix button appears, and
+     * flattening it to a string here is exactly how that was lost before.
+     */
+    private val activeError = MutableStateFlow<GeckoError?>(null)
     private val isGenerating = MutableStateFlow(false)
     private val loadingModelConfigIds = MutableStateFlow<Set<String>>(emptySet())
 
@@ -108,13 +116,13 @@ class ChatViewModel @Inject constructor(
     private data class MiscSection(
         val conversations: List<com.gecko.core.model.conversation.Conversation>,
         val editingId: String?,
-        val error: String?,
+        val error: GeckoError?,
     )
 
     private val chatSection = combine(currentConversationId, messages, isGenerating, ::ChatSection)
     private val providerSection =
         combine(providerConfigs, selectedConfigId, selectedModelId, modelCatalog, loadingModelConfigIds, ::ProviderSection)
-    private val miscSection = combine(conversations, editingMessageId, errorMessage, ::MiscSection)
+    private val miscSection = combine(conversations, editingMessageId, activeError, ::MiscSection)
 
     val uiState: StateFlow<ChatUiState> = combine(
         chatSection,
@@ -134,7 +142,7 @@ class ChatViewModel @Inject constructor(
             modelCatalog = provider.catalog,
             loadingModelConfigIds = provider.loadingModels,
             editingMessageId = misc.editingId,
-            errorMessage = misc.error,
+            error = misc.error,
             sendOnEnter = prefs.sendOnEnter,
             streamingEnabled = prefs.streamingEnabled,
         )
@@ -161,7 +169,7 @@ class ChatViewModel @Inject constructor(
                 // all models", and must not be quietly swapped back to the curated default.
                 if (selected != null && modelId != null && models.any { it.modelId == modelId }) return@combine null
                 val curated = models.curatedForSelection(config.providerId, config.baseUrlOverride)
-                val preferredModel = curated.primary.firstOrNull() ?: return@combine null
+                val preferredModel = curated.defaultChoice ?: return@combine null
                 config.id to preferredModel.modelId
             }.collectLatest { replacement ->
                 replacement ?: return@collectLatest
@@ -204,7 +212,13 @@ class ChatViewModel @Inject constructor(
         val configId = selectedConfigId.value
         val modelId = selectedModelId.value
         if (configId == null || modelId == null) {
-            errorMessage.value = "Pick an AI provider and model first — tap the model name above, or go to Settings → Model preferences."
+            // Two different problems wear the same symptom here: no key saved at all, versus a key
+            // whose catalog hasn't produced a model yet. They need opposite advice.
+            activeError.value = if (uiState.value.enabledProviders.isEmpty()) {
+                GeckoError(ErrorKind.NoApiKey)
+            } else {
+                GeckoError(ErrorKind.ModelUnavailable).withProviderContext()
+            }
             return
         }
 
@@ -255,8 +269,7 @@ class ChatViewModel @Inject constructor(
     private suspend fun resolveProviderId(configId: String): ProviderId? =
         providerConfigs.first().find { it.id == configId }?.providerId
 
-    private fun unresolvedProviderError() =
-        ChatEvent.Error(message = "This API key was removed. Pick another one.", cause = null, isRetryable = false)
+    private fun unresolvedProviderError() = ChatEvent.Error(GeckoError(ErrorKind.KeyRemoved))
 
     fun stopGeneration() {
         generationJob?.cancel()
@@ -333,7 +346,7 @@ class ChatViewModel @Inject constructor(
             try {
                 refreshProviderModelsUseCase(configId).onFailure { error ->
                     if (!silent) {
-                        errorMessage.value = error.message ?: "Couldn't load this provider's models."
+                        activeError.value = error.asGeckoError(configId)
                     }
                 }
             } finally {
@@ -343,8 +356,33 @@ class ChatViewModel @Inject constructor(
     }
 
     fun dismissError() {
-        errorMessage.value = null
+        activeError.value = null
     }
+
+    /**
+     * Re-opens the explanation for a message that failed earlier. The dialog that first reported it
+     * is long gone by the time someone scrolls back, so the transcript keeps enough to rebuild it.
+     */
+    fun showError(error: GeckoError) {
+        activeError.value = error.withProviderContext()
+    }
+
+    /**
+     * Fills in which key and which provider a failure concerns when the layer that produced it
+     * couldn't know — a provider deep in a stream has no idea which of several saved keys it was
+     * built from, and that's exactly what the "Open key" button needs.
+     */
+    private fun GeckoError.withProviderContext(configId: String? = null): GeckoError {
+        val id = this.configId ?: configId ?: selectedConfigId.value
+        val label = providerLabel ?: uiState.value.providerConfigs.find { it.id == id }?.displayLabel
+        return copy(configId = id, providerLabel = label)
+    }
+
+    private fun Throwable.asGeckoError(configId: String): GeckoError =
+        ((this as? GeckoException)?.error ?: GeckoError(ErrorKind.Unknown, technicalDetail = message))
+            .withProviderContext(configId)
+
+    private val ProviderConfig.displayLabel: String get() = label.ifBlank { providerId.displayName }
 
     private fun runGeneration(flowProvider: suspend () -> Flow<ChatEvent>) {
         generationJob?.cancel()
@@ -352,7 +390,9 @@ class ChatViewModel @Inject constructor(
             isGenerating.value = true
             try {
                 flowProvider().collect { event ->
-                    if (event is ChatEvent.Error) errorMessage.value = event.message
+                    if (event is ChatEvent.Error && event.error.deservesInterrupting) {
+                        activeError.value = event.error.withProviderContext()
+                    }
                 }
             } finally {
                 isGenerating.value = false

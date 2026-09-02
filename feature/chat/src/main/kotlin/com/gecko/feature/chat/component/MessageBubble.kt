@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -53,6 +52,8 @@ import androidx.compose.ui.unit.dp
 import com.gecko.core.designsystem.theme.GeckoMotion
 import com.gecko.core.markdown.StreamingMarkdown
 import com.gecko.core.model.chat.ChatMessage
+import com.gecko.core.model.error.GeckoError
+import com.gecko.domain.error.copyForUser
 import com.gecko.core.model.chat.MessageRole
 import com.gecko.core.model.chat.MessageStatus
 
@@ -71,11 +72,13 @@ fun MessageBubble(
     onSubmitEdit: (String) -> Unit,
     onCancelEdit: () -> Unit,
     onRegenerate: () -> Unit,
+    onShowError: (GeckoError) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     when (message.role) {
         MessageRole.USER -> UserMessage(message, isEditing, onBeginEdit, onSubmitEdit, onCancelEdit, modifier)
-        MessageRole.ASSISTANT -> AssistantMessage(message, visibleContent, isLastAssistantMessage, onRegenerate, modifier)
+        MessageRole.ASSISTANT ->
+            AssistantMessage(message, visibleContent, isLastAssistantMessage, onRegenerate, onShowError, modifier)
         MessageRole.SYSTEM -> Unit
     }
 }
@@ -140,6 +143,7 @@ private fun AssistantMessage(
     visibleText: String,
     isLastAssistantMessage: Boolean,
     onRegenerate: () -> Unit,
+    onShowError: (GeckoError) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // The reveal runs on for a moment past the end of the network stream, draining whatever text
@@ -149,22 +153,6 @@ private fun AssistantMessage(
 
     Column(modifier = modifier.fillMaxWidth()) {
         when {
-            message.status == MessageStatus.ERROR -> {
-                Row(verticalAlignment = Alignment.Top) {
-                    Icon(
-                        imageVector = Icons.Outlined.ErrorOutline,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(top = 2.dp),
-                    )
-                    Spacer(Modifier.padding(start = 4.dp))
-                    Text(
-                        text = message.errorMessage ?: "Something went wrong.",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-            }
             visibleText.isEmpty() && message.generatedImageBase64 == null && stillTyping -> {
                 ThinkingIndicator()
             }
@@ -182,6 +170,16 @@ private fun AssistantMessage(
             }
         }
 
+        // Additive, below whatever text did arrive. This used to be a branch that *replaced* the
+        // message body, so a reply that failed halfway threw away the half the user already had —
+        // even though it was persisted and sitting right there.
+        message.errorKind?.let { kind ->
+            MessageErrorNotice(
+                label = GeckoError(kind, message.errorMessage).copyForUser().shortLabel,
+                onExplain = { onShowError(GeckoError(kind, message.errorMessage)) },
+            )
+        }
+
         if (!stillTyping) {
             MessageActionsRow(alignEnd = false) {
                 CopyActionIcon(text = message.content)
@@ -190,6 +188,33 @@ private fun AssistantMessage(
                 }
             }
         }
+    }
+}
+
+/**
+ * The quiet marker a failed reply leaves behind. Deliberately small — the dialog said the whole
+ * thing when it happened, and this only has to be enough to find the message again later and ask
+ * what went wrong.
+ */
+@Composable
+private fun MessageErrorNotice(label: String, onExplain: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(top = 4.dp),
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.ErrorOutline,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.error,
+            modifier = Modifier.size(16.dp),
+        )
+        Spacer(Modifier.padding(start = 6.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.error,
+        )
+        TextButton(onClick = onExplain) { Text("What happened?") }
     }
 }
 

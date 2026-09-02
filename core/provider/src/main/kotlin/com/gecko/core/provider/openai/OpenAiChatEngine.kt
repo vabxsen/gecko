@@ -7,13 +7,16 @@ import com.gecko.core.model.chat.MessageRole
 import com.gecko.core.model.chat.TokenUsage
 import com.gecko.core.network.sse.SseException
 import com.gecko.core.network.sse.streamSse
+import com.gecko.core.provider.internal.EmptyProviderResponseException
+import com.gecko.core.model.error.GeckoException
 import com.gecko.core.provider.internal.ProviderHttpException
 import com.gecko.core.provider.internal.ProviderJson
+import com.gecko.core.provider.internal.ProviderReportedException
 import com.gecko.core.provider.internal.RetryPolicy
 import com.gecko.core.provider.internal.bodyOrThrow
+import com.gecko.core.provider.internal.classifyProviderError
 import com.gecko.core.provider.internal.executeWithRetry
-import com.gecko.core.provider.internal.friendlyMessageFor
-import com.gecko.core.provider.internal.httpStatusCodeOrNull
+import com.gecko.core.provider.internal.toGeckoError
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flow
@@ -61,11 +64,16 @@ internal class OpenAiChatEngine(
                 attempt++
                 var finishReason: FinishReason? = null
                 var usage: TokenUsage? = null
+                // A reasoning model's working-out, held back rather than emitted as it arrives:
+                // for a model that also answers normally this is thinking the user didn't ask to
+                // see, but for one that answers *entirely* in this field it's the whole reply, so
+                // it's flushed at the end only when no real content ever showed up.
+                val reasoning = StringBuilder()
                 try {
                     httpClient.streamSse(request).collect { event ->
                         if (event.data == "[DONE]") return@collect
-                        val chunk = runCatching { ProviderJson.decodeFromString(OpenAiStreamChunk.serializer(), event.data) }
-                            .getOrNull() ?: return@collect
+                        val chunk = event.data.decodeStreamChunkOrThrow() ?: return@collect
+                        chunk.error?.throwAsProviderFailure()
 
                         chunk.choices.firstOrNull()?.let { choice ->
                             choice.delta.content?.let { text ->
@@ -74,12 +82,18 @@ internal class OpenAiChatEngine(
                                     emit(ChatEvent.ContentDelta(text))
                                 }
                             }
+                            choice.delta.reasoningContent?.let(reasoning::append)
                             choice.finishReason?.let { finishReason = it.toFinishReason() }
                         }
                         chunk.usage?.let {
                             usage = TokenUsage(it.promptTokens, it.completionTokens, it.totalTokens)
                         }
                     }
+                    if (!contentReceived && reasoning.isNotEmpty()) {
+                        contentReceived = true
+                        emit(ChatEvent.ContentDelta(reasoning.toString()))
+                    }
+                    if (!contentReceived) throw EmptyProviderResponseException()
                     emit(ChatEvent.Completed(finishReason ?: FinishReason.STOP, usage))
                     break
                 } catch (e: Exception) {
@@ -95,10 +109,14 @@ internal class OpenAiChatEngine(
                 throw e.toReadableException()
             }
             val parsed = ProviderJson.decodeFromString(OpenAiChatResponse.serializer(), bodyText)
-            val choice = parsed.choices.firstOrNull()
-            choice?.message?.content?.let { text -> if (text.isNotEmpty()) emit(ChatEvent.ContentDelta(text)) }
+            parsed.error?.throwAsProviderFailure()
+            val choice = parsed.choices.firstOrNull() ?: throw EmptyProviderResponseException()
+            val text = choice.message.content?.takeIf { it.isNotEmpty() }
+                ?: choice.message.reasoningContent?.takeIf { it.isNotEmpty() }
+                ?: throw EmptyProviderResponseException()
+            emit(ChatEvent.ContentDelta(text))
             val usage = parsed.usage?.let { TokenUsage(it.promptTokens, it.completionTokens, it.totalTokens) }
-            emit(ChatEvent.Completed(choice?.finishReason?.toFinishReason() ?: FinishReason.STOP, usage))
+            emit(ChatEvent.Completed(choice.finishReason?.toFinishReason() ?: FinishReason.STOP, usage))
         }
     }.catchAsChatEvent()
 }
@@ -141,25 +159,46 @@ private fun String.toFinishReason(): FinishReason = when (this) {
     else -> FinishReason.STOP
 }
 
-internal fun ProviderHttpException.toReadableException(): Exception {
+/**
+ * Decodes one `data:` frame. A frame that isn't a chat chunk is given a second reading as a bare
+ * error object before being discarded — the previous unconditional `?: return@collect` is exactly
+ * how a mid-stream "insufficient credits" turned into a silent, empty reply.
+ */
+private fun String.decodeStreamChunkOrThrow(): OpenAiStreamChunk? {
+    runCatching { ProviderJson.decodeFromString(OpenAiStreamChunk.serializer(), this) }
+        .getOrNull()
+        ?.let { return it }
+    runCatching { ProviderJson.decodeFromString(OpenAiErrorResponse.serializer(), this) }
+        .getOrNull()
+        ?.error
+        ?.throwAsProviderFailure()
+    return null
+}
+
+private fun OpenAiErrorDetail.throwAsProviderFailure(): Nothing =
+    throw ProviderReportedException(
+        code = httpStatusCode,
+        message = message.takeIf { it.isNotBlank() } ?: "The provider reported an error.",
+    )
+
+/**
+ * Classified here rather than at the call site so `listModels()` and `testConnection()` fail with
+ * the same vocabulary chat does. They previously returned the raw vendor JSON, which is why one
+ * bad key read as a tidy sentence in the chat and as a wall of provider text in Settings.
+ */
+internal fun ProviderHttpException.toReadableException(): GeckoException {
     val parsedMessage = runCatching {
         ProviderJson.decodeFromString(OpenAiErrorResponse.serializer(), message.orEmpty()).error?.message
     }.getOrNull()
-    return Exception(parsedMessage?.takeIf { it.isNotBlank() } ?: message, this)
+    return GeckoException(
+        classifyProviderError(
+            statusCode = code,
+            detail = parsedMessage?.takeIf { it.isNotBlank() } ?: message,
+            cause = this,
+        ),
+    )
 }
 
 private fun Flow<ChatEvent>.catchAsChatEvent(): Flow<ChatEvent> = catch { e ->
-    val rawMessage = when (e) {
-        is SseException -> e.message ?: "Stream failed"
-        else -> e.message ?: "Request failed"
-    }
-    val statusCode = e.httpStatusCodeOrNull()
-    emit(
-        ChatEvent.Error(
-            message = friendlyMessageFor(statusCode, rawMessage),
-            cause = e,
-            isRetryable = RetryPolicy.isRetryableThrowable(e),
-            httpStatusCode = statusCode,
-        ),
-    )
+    emit(ChatEvent.Error(error = e.toGeckoError(), cause = e))
 }

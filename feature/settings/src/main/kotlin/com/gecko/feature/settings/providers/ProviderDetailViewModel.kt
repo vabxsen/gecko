@@ -9,7 +9,9 @@ import com.gecko.core.model.provider.ModelInfo
 import com.gecko.core.model.provider.ProviderConfig
 import com.gecko.core.model.provider.ProviderId
 import com.gecko.domain.repository.ProviderConfigRepository
+import com.gecko.core.model.preferences.UserPreferences
 import com.gecko.domain.repository.SecureKeyRepository
+import com.gecko.domain.repository.UserPreferencesRepository
 import com.gecko.domain.usecase.RefreshProviderModelsUseCase
 import com.gecko.domain.usecase.SaveProviderApiKeyUseCase
 import com.gecko.domain.usecase.TestProviderConnectionUseCase
@@ -32,15 +34,23 @@ data class ProviderDetailUiState(
     val apiKeyValue: String? = null,
     val isApiKeyLoaded: Boolean = false,
     val saveKeyErrorMessage: String? = null,
+    /** The app-wide model, shown here only when this is the key it belongs to. */
+    val selectedModelId: String? = null,
 ) {
     val providerId: ProviderId? get() = config?.providerId
     val label: String get() = config?.label.orEmpty()
     val enabled: Boolean get() = config?.enabled ?: false
     val hasApiKey: Boolean get() = config?.hasApiKey ?: false
     val connectionStatus: ConnectionStatus get() = config?.connectionStatus ?: ConnectionStatus.Untested
-    val selectedModelId: String? get() = config?.selectedModelId
     val baseUrlOverride: String? get() = config?.baseUrlOverride
 }
+
+private data class KeyEditingState(
+    val value: String?,
+    val loaded: Boolean,
+    val error: String?,
+    val prefs: UserPreferences,
+)
 
 @HiltViewModel
 class ProviderDetailViewModel @Inject constructor(
@@ -48,6 +58,7 @@ class ProviderDetailViewModel @Inject constructor(
     private val providerConfigRepository: ProviderConfigRepository,
     private val secureKeyRepository: SecureKeyRepository,
     private val saveProviderApiKeyUseCase: SaveProviderApiKeyUseCase,
+    private val userPreferencesRepository: UserPreferencesRepository,
     private val testProviderConnectionUseCase: TestProviderConnectionUseCase,
     private val refreshProviderModelsUseCase: RefreshProviderModelsUseCase,
 ) : ViewModel() {
@@ -75,17 +86,23 @@ class ProviderDetailViewModel @Inject constructor(
         providerConfigRepository.observeModels(id),
         isLoadingModels,
         isSavingKey,
-        combine(apiKeyValue, isApiKeyLoaded, saveKeyErrorMessage, ::Triple),
-    ) { config, models, loadingModels, savingKey, (keyValue, keyLoaded, saveError) ->
+        // Grouped because combine only has typed overloads up to five flows, and the untyped
+        // vararg version loses every type in the lambda.
+        combine(apiKeyValue, isApiKeyLoaded, saveKeyErrorMessage, userPreferencesRepository.userPreferences, ::KeyEditingState),
+    ) { config, models, loadingModels, savingKey, keyState ->
         ProviderDetailUiState(
             id = id,
             config = config,
             availableModels = models,
             isLoadingModels = loadingModels,
             isSavingKey = savingKey,
-            apiKeyValue = keyValue,
-            isApiKeyLoaded = keyLoaded,
-            saveKeyErrorMessage = saveError,
+            apiKeyValue = keyState.value,
+            isApiKeyLoaded = keyState.loaded,
+            saveKeyErrorMessage = keyState.error,
+            // Reads the preference chat actually uses, rather than the per-config column that
+            // nothing outside this screen ever looked at.
+            selectedModelId = keyState.prefs.defaultModelId
+                .takeIf { keyState.prefs.defaultProviderConfigId == id },
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProviderDetailUiState(id = id))
 
@@ -138,10 +155,6 @@ class ProviderDetailViewModel @Inject constructor(
             refreshProviderModelsUseCase(id)
             isLoadingModels.value = false
         }
-    }
-
-    fun selectModel(modelId: String) {
-        viewModelScope.launch { providerConfigRepository.setSelectedModel(id, modelId) }
     }
 
     fun setBaseUrlOverride(url: String?) {

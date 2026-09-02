@@ -99,9 +99,9 @@ class OpenAiProviderTest {
         provider.sendMessage(listOf(userMessage("Hi")), model = "gpt-4o", stream = true).test {
             assertEquals(ChatEvent.Started(), awaitItem())
             val error = awaitItem() as ChatEvent.Error
-            assertFalse(error.isRetryable)
-            assertEquals(401, error.httpStatusCode)
-            assertEquals("Invalid API key — check it in Settings.", error.message)
+            assertFalse(error.error.isRetryable)
+            assertEquals(401, error.error.httpStatusCode)
+            assertEquals("Invalid API key", error.error.technicalDetail)
             awaitComplete()
         }
     }
@@ -134,8 +134,8 @@ class OpenAiProviderTest {
         provider.sendMessage(listOf(userMessage("Hi")), model = "gpt-4o", stream = false).test {
             assertEquals(ChatEvent.Started(), awaitItem())
             val error = awaitItem() as ChatEvent.Error
-            assertFalse(error.isRetryable)
-            assertEquals(401, error.httpStatusCode)
+            assertFalse(error.error.isRetryable)
+            assertEquals(401, error.error.httpStatusCode)
             awaitComplete()
         }
         assertEquals(1, server.requestCount)

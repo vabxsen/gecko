@@ -1,6 +1,8 @@
 package com.gecko.domain.usecase
 
 import com.gecko.core.model.chat.ChatEvent
+import com.gecko.core.model.error.ErrorKind
+import com.gecko.core.model.error.GeckoError
 import com.gecko.core.model.chat.FinishReason
 import com.gecko.core.model.chat.MessageRole
 import com.gecko.core.model.chat.MessageStatus
@@ -102,7 +104,7 @@ class SendChatMessageUseCaseTest {
                 flow {
                     emit(ChatEvent.Started())
                     emit(ChatEvent.ContentDelta("Partial"))
-                    emit(ChatEvent.Error(message = "Rate limited", cause = null, isRetryable = true))
+                    emit(ChatEvent.Error(GeckoError(ErrorKind.RateLimited, technicalDetail = "Rate limited")))
                 }
             },
         )
