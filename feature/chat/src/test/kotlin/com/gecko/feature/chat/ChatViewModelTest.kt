@@ -6,6 +6,7 @@ import com.gecko.core.model.chat.FinishReason
 import com.gecko.core.model.chat.MessageRole
 import com.gecko.core.model.chat.MessageStatus
 import com.gecko.core.model.preferences.UserPreferences
+import com.gecko.core.model.provider.ModelInfo
 import com.gecko.core.model.provider.ProviderId
 import com.gecko.core.testing.fake.FakeChatCompletionRepository
 import com.gecko.core.testing.fake.FakeConversationRepository
@@ -13,6 +14,7 @@ import com.gecko.core.testing.fake.FakeProviderConfigRepository
 import com.gecko.core.testing.fake.FakeUserPreferencesRepository
 import com.gecko.core.testing.rule.MainDispatcherRule
 import com.gecko.domain.usecase.EditAndResendMessageUseCase
+import com.gecko.domain.usecase.RefreshProviderModelsUseCase
 import com.gecko.domain.usecase.RegenerateResponseUseCase
 import com.gecko.domain.usecase.SendChatMessageUseCase
 import kotlinx.coroutines.flow.flow
@@ -57,6 +59,7 @@ class ChatViewModelTest {
                 conversationRepository,
                 SendChatMessageUseCase(conversationRepository, chatCompletionRepository),
             ),
+            refreshProviderModelsUseCase = RefreshProviderModelsUseCase(chatCompletionRepository, providerConfigRepository),
         )
     }
 
@@ -198,6 +201,133 @@ class ChatViewModelTest {
 
         assertEquals(1, invocationCount)
         assertEquals(messagesAfterFirstSend, viewModel.uiState.value.messages.size)
+    }
+
+    private fun geminiModel(id: String) = ModelInfo(
+        providerId = ProviderId.GOOGLE,
+        modelId = id,
+        displayName = id,
+        contextWindowTokens = 1_000_000,
+        supportsStreaming = true,
+        supportsImages = true,
+    )
+
+    /**
+     * Adds an enabled, keyed Google config with [modelIds] already cached. `gemini-pro-latest` is
+     * on the curated shortlist; anything else lands in the "Show all models" remainder.
+     */
+    private suspend fun FakeProviderConfigRepository.addGoogleKeyWith(vararg modelIds: String): String {
+        val configId = addProvider(ProviderId.GOOGLE, "Gemini").getOrThrow()
+        setHasApiKey(configId, true)
+        saveModels(configId, modelIds.map(::geminiModel))
+        return configId
+    }
+
+    @Test
+    fun choosingAModelFromOutsideTheCuratedShortlistIsNotRevertedToTheDefault() = runTest {
+        val providerConfigRepository = FakeProviderConfigRepository()
+        val viewModel = buildViewModel(
+            providerConfigRepository = providerConfigRepository,
+            defaultProviderId = null,
+            defaultModelId = null,
+        )
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        val configId = providerConfigRepository.addGoogleKeyWith("gemini-pro-latest", "gemini-experimental-x")
+        advanceUntilIdle()
+
+        viewModel.selectModel(configId, "gemini-experimental-x")
+        advanceUntilIdle()
+
+        assertEquals(configId, viewModel.uiState.value.selectedConfigId)
+        assertEquals("gemini-experimental-x", viewModel.uiState.value.selectedModelId)
+    }
+
+    @Test
+    fun aModelTheProviderNoLongerOffersFallsBackToTheCuratedDefault() = runTest {
+        val providerConfigRepository = FakeProviderConfigRepository()
+        val viewModel = buildViewModel(
+            providerConfigRepository = providerConfigRepository,
+            defaultProviderId = null,
+            defaultModelId = null,
+        )
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        val configId = providerConfigRepository.addGoogleKeyWith("gemini-pro-latest", "gemini-experimental-x")
+        advanceUntilIdle()
+
+        viewModel.selectModel(configId, "gemini-experimental-x")
+        advanceUntilIdle()
+        // The provider retires that id on its next catalog refresh.
+        providerConfigRepository.saveModels(configId, listOf(geminiModel("gemini-pro-latest")))
+        advanceUntilIdle()
+
+        assertEquals("gemini-pro-latest", viewModel.uiState.value.selectedModelId)
+    }
+
+    @Test
+    fun aFirstProviderWithNothingSelectedGetsAdoptedAutomatically() = runTest {
+        val providerConfigRepository = FakeProviderConfigRepository()
+        val viewModel = buildViewModel(
+            providerConfigRepository = providerConfigRepository,
+            defaultProviderId = null,
+            defaultModelId = null,
+        )
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        advanceUntilIdle()
+        assertNull(viewModel.uiState.value.selectedModelId)
+
+        val configId = providerConfigRepository.addGoogleKeyWith("gemini-pro-latest", "gemini-experimental-x")
+        advanceUntilIdle()
+
+        assertEquals(configId, viewModel.uiState.value.selectedConfigId)
+        assertEquals("gemini-pro-latest", viewModel.uiState.value.selectedModelId)
+        assertEquals(true, viewModel.uiState.value.canSend)
+    }
+
+    @Test
+    fun everyEnabledKeysCatalogIsExposedAtOnceNotJustTheSelectedOne() = runTest {
+        val providerConfigRepository = FakeProviderConfigRepository()
+        val viewModel = buildViewModel(
+            providerConfigRepository = providerConfigRepository,
+            defaultProviderId = null,
+            defaultModelId = null,
+        )
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        val googleId = providerConfigRepository.addGoogleKeyWith("gemini-pro-latest")
+        val openAiId = providerConfigRepository.addProvider(ProviderId.OPENAI, "OpenAI").getOrThrow()
+        providerConfigRepository.setHasApiKey(openAiId, true)
+        providerConfigRepository.saveModels(
+            openAiId,
+            listOf(geminiModel("gpt-4o").copy(providerId = ProviderId.OPENAI)),
+        )
+        advanceUntilIdle()
+
+        val catalog = viewModel.uiState.value.modelCatalog
+        assertEquals(listOf("gemini-pro-latest"), catalog[googleId]?.map { it.modelId })
+        assertEquals(listOf("gpt-4o"), catalog[openAiId]?.map { it.modelId })
+    }
+
+    @Test
+    fun aKeyWithNoCachedCatalogIsFetchedInTheBackground() = runTest {
+        val providerConfigRepository = FakeProviderConfigRepository()
+        val chatCompletionRepository = FakeChatCompletionRepository(
+            fetchModelsResult = Result.success(listOf(geminiModel("gemini-pro-latest"))),
+        )
+        val viewModel = buildViewModel(
+            providerConfigRepository = providerConfigRepository,
+            chatCompletionRepository = chatCompletionRepository,
+            defaultProviderId = null,
+            defaultModelId = null,
+        )
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        val configId = providerConfigRepository.addProvider(ProviderId.GOOGLE, "Gemini").getOrThrow()
+        providerConfigRepository.setHasApiKey(configId, true)
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf("gemini-pro-latest"),
+            viewModel.uiState.value.modelCatalog[configId]?.map { it.modelId },
+        )
+        assertEquals(emptySet<String>(), viewModel.uiState.value.loadingModelConfigIds)
     }
 
     @Test

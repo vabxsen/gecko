@@ -26,8 +26,11 @@ import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
@@ -39,7 +42,8 @@ import com.gecko.feature.chat.component.ConversationDrawerContent
 import com.gecko.feature.chat.component.EmptyChatState
 import com.gecko.feature.chat.component.MessageComposer
 import com.gecko.feature.chat.component.MessageList
-import com.gecko.feature.chat.component.ModelSelectorDropdown
+import com.gecko.feature.chat.component.ModelPickerSheet
+import com.gecko.feature.chat.component.ModelSelectorChip
 import kotlinx.coroutines.launch
 
 /** Screens at least this wide get a permanent side rail instead of a swipe-away drawer. */
@@ -89,6 +93,7 @@ fun ChatScreen(
                 snackbarHostState = snackbarHostState,
                 showMenuButton = false,
                 onOpenDrawer = {},
+                onOpenSettings = onOpenSettings,
                 modifier = Modifier.fillMaxHeight(),
             )
         }
@@ -133,6 +138,7 @@ fun ChatScreen(
                 snackbarHostState = snackbarHostState,
                 showMenuButton = true,
                 onOpenDrawer = { scope.launch { drawerState.open() } },
+                onOpenSettings = onOpenSettings,
             )
         }
     }
@@ -146,6 +152,7 @@ private fun ChatContent(
     snackbarHostState: SnackbarHostState,
     showMenuButton: Boolean,
     onOpenDrawer: () -> Unit,
+    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // 32dp of bottom margin is for comfortable thumb reach above the gesture/nav bar when the
@@ -156,6 +163,21 @@ private fun ChatContent(
         targetValue = if (imeVisible) 12.dp else 32.dp,
         label = "composerBottomPadding",
     )
+    var modelPickerVisible by rememberSaveable { mutableStateOf(false) }
+
+    if (modelPickerVisible) {
+        ModelPickerSheet(
+            providers = uiState.enabledProviders,
+            modelCatalog = uiState.modelCatalog,
+            loadingConfigIds = uiState.loadingModelConfigIds,
+            selectedConfigId = uiState.selectedConfigId,
+            selectedModelId = uiState.selectedModelId,
+            onSelect = viewModel::selectModel,
+            onLoadModels = { configId -> viewModel.loadModels(configId) },
+            onOpenSettings = onOpenSettings,
+            onDismiss = { modelPickerVisible = false },
+        )
+    }
 
     Scaffold(
         modifier = modifier,
@@ -165,13 +187,10 @@ private fun ChatContent(
                 showMenuButton = showMenuButton,
                 onOpenDrawer = onOpenDrawer,
                 modelSelector = {
-                    ModelSelectorDropdown(
-                        enabledProviders = uiState.enabledProviders,
-                        selectedConfigId = uiState.selectedConfigId,
-                        selectedModelId = uiState.selectedModelId,
-                        modelsForSelectedProvider = uiState.availableModels,
-                        onSelectProviderConfig = viewModel::selectProviderConfig,
-                        onSelectModel = viewModel::selectModel,
+                    ModelSelectorChip(
+                        selectedProvider = uiState.selectedProvider,
+                        selectedModelLabel = uiState.selectedModelLabel,
+                        onClick = { modelPickerVisible = true },
                     )
                 },
             )

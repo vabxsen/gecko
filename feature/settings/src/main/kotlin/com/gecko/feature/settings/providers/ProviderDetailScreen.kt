@@ -40,6 +40,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.gecko.core.designsystem.icon.ProviderLogo
 import com.gecko.core.model.provider.ConnectionStatus
 import com.gecko.core.model.provider.ProviderId
+import com.gecko.domain.model.friendlyName
 import com.gecko.feature.settings.component.ModelSelectorRow
 import com.gecko.feature.settings.component.SettingsSectionHeader
 import com.gecko.feature.settings.component.SettingsSwitchRow
@@ -264,7 +265,7 @@ fun ProviderDetailScreen(
             } else {
                 item {
                     ModelSelectorRow(
-                        selectedModelName = uiState.availableModels.find { it.modelId == uiState.selectedModelId }?.displayName,
+                        selectedModelName = uiState.availableModels.find { it.modelId == uiState.selectedModelId }?.friendlyName,
                         onClick = onOpenModelSelection,
                     )
                 }

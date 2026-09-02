@@ -7,12 +7,15 @@ import com.gecko.core.model.chat.ChatEvent
 import com.gecko.core.model.chat.ChatMessage
 import com.gecko.core.model.chat.MessageRole
 import com.gecko.core.model.chat.MessageStatus
+import com.gecko.core.model.provider.ModelInfo
+import com.gecko.core.model.provider.ProviderConfig
 import com.gecko.core.model.provider.ProviderId
 import com.gecko.domain.model.curatedForSelection
 import com.gecko.domain.repository.ConversationRepository
 import com.gecko.domain.repository.ProviderConfigRepository
 import com.gecko.domain.repository.UserPreferencesRepository
 import com.gecko.domain.usecase.EditAndResendMessageUseCase
+import com.gecko.domain.usecase.RefreshProviderModelsUseCase
 import com.gecko.domain.usecase.RegenerateResponseUseCase
 import com.gecko.domain.usecase.SendChatMessageUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -26,10 +29,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class, kotlinx.coroutines.FlowPreview::class)
@@ -41,6 +47,7 @@ class ChatViewModel @Inject constructor(
     private val sendChatMessageUseCase: SendChatMessageUseCase,
     private val regenerateResponseUseCase: RegenerateResponseUseCase,
     private val editAndResendMessageUseCase: EditAndResendMessageUseCase,
+    private val refreshProviderModelsUseCase: RefreshProviderModelsUseCase,
 ) : ViewModel() {
 
     private val currentConversationId = MutableStateFlow<String?>(null)
@@ -50,6 +57,14 @@ class ChatViewModel @Inject constructor(
     private val editingMessageId = MutableStateFlow<String?>(null)
     private val errorMessage = MutableStateFlow<String?>(null)
     private val isGenerating = MutableStateFlow(false)
+    private val loadingModelConfigIds = MutableStateFlow<Set<String>>(emptySet())
+
+    /**
+     * Configs whose catalog has already been auto-fetched once this session. Without it, a key
+     * that legitimately returns an empty catalog (or is simply offline) would re-trigger the
+     * background fetch on every emission, since its catalog stays empty either way.
+     */
+    private val autoLoadAttempted = mutableSetOf<String>()
 
     private var generationJob: Job? = null
 
@@ -65,16 +80,30 @@ class ChatViewModel @Inject constructor(
 
     private val providerConfigs = providerConfigRepository.observeAll()
 
-    private val availableModels = selectedConfigId.flatMapLatest { configId ->
-        if (configId == null) flowOf(emptyList()) else providerConfigRepository.observeModels(configId)
-    }
+    /**
+     * Every saved config's cached catalog at once, so the model picker can list all providers
+     * without a per-provider "tap to load" round trip. Re-subscribes only when the *set of config
+     * ids* changes, not on every unrelated config edit (a renamed label, a connection-status
+     * write), so an in-flight catalog observation isn't torn down and restarted needlessly.
+     */
+    private val modelCatalog: Flow<Map<String, List<ModelInfo>>> = providerConfigs
+        .map { configs -> configs.map { it.id } }
+        .distinctUntilChanged()
+        .flatMapLatest { ids ->
+            if (ids.isEmpty()) {
+                flowOf(emptyMap())
+            } else {
+                combine(ids.map { id -> providerConfigRepository.observeModels(id).map { id to it } }) { it.toMap() }
+            }
+        }
 
     private data class ChatSection(val conversationId: String?, val messages: List<ChatMessage>, val generating: Boolean)
     private data class ProviderSection(
-        val configs: List<com.gecko.core.model.provider.ProviderConfig>,
+        val configs: List<ProviderConfig>,
         val configId: String?,
         val modelId: String?,
-        val models: List<com.gecko.core.model.provider.ModelInfo>,
+        val catalog: Map<String, List<ModelInfo>>,
+        val loadingModels: Set<String>,
     )
     private data class MiscSection(
         val conversations: List<com.gecko.core.model.conversation.Conversation>,
@@ -83,7 +112,8 @@ class ChatViewModel @Inject constructor(
     )
 
     private val chatSection = combine(currentConversationId, messages, isGenerating, ::ChatSection)
-    private val providerSection = combine(providerConfigs, selectedConfigId, selectedModelId, availableModels, ::ProviderSection)
+    private val providerSection =
+        combine(providerConfigs, selectedConfigId, selectedModelId, modelCatalog, loadingModelConfigIds, ::ProviderSection)
     private val miscSection = combine(conversations, editingMessageId, errorMessage, ::MiscSection)
 
     val uiState: StateFlow<ChatUiState> = combine(
@@ -101,7 +131,8 @@ class ChatViewModel @Inject constructor(
             providerConfigs = provider.configs,
             selectedConfigId = provider.configId,
             selectedModelId = provider.modelId,
-            availableModels = provider.models,
+            modelCatalog = provider.catalog,
+            loadingModelConfigIds = provider.loadingModels,
             editingMessageId = misc.editingId,
             errorMessage = misc.error,
             sendOnEnter = prefs.sendOnEnter,
@@ -117,11 +148,21 @@ class ChatViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            combine(providerConfigs, selectedConfigId, selectedModelId, availableModels) { configs, configId, modelId, models ->
-                val config = configs.find { it.id == configId } ?: return@combine null
+            combine(providerConfigs, selectedConfigId, selectedModelId, modelCatalog) { configs, configId, modelId, catalog ->
+                val selected = configs.find { it.id == configId }
+                // Nothing chosen yet — a fresh install, or the chosen key was deleted. Adopt the
+                // first usable key rather than leaving the composer unsendable until the user
+                // finds their way to Settings.
+                val config = selected ?: configs.firstOrNull { it.enabled && it.hasApiKey } ?: return@combine null
+                val models = catalog[config.id].orEmpty()
+                // Otherwise only step in when the selection is unusable — no model at all, or one
+                // this provider no longer offers (a retired or renamed id). Anything the catalog
+                // still lists is a deliberate choice, including a model picked from behind "Show
+                // all models", and must not be quietly swapped back to the curated default.
+                if (selected != null && modelId != null && models.any { it.modelId == modelId }) return@combine null
                 val curated = models.curatedForSelection(config.providerId, config.baseUrlOverride)
                 val preferredModel = curated.primary.firstOrNull() ?: return@combine null
-                if (modelId in curated.primary.map { it.modelId }) null else config.id to preferredModel.modelId
+                config.id to preferredModel.modelId
             }.collectLatest { replacement ->
                 replacement ?: return@collectLatest
                 val (configId, modelId) = replacement
@@ -129,6 +170,17 @@ class ChatViewModel @Inject constructor(
                 selectedModelId.value = modelId
                 userPreferencesRepository.setDefaultProviderConfig(configId)
                 userPreferencesRepository.setDefaultModel(modelId)
+            }
+        }
+        // A key whose catalog was never cached (its fetch failed when the key was saved, or the
+        // app was offline then) would otherwise show up in the picker as an empty section. Fetch
+        // it once per session in the background; the picker's per-provider "Load models" button
+        // is the retry path if this doesn't land.
+        viewModelScope.launch {
+            combine(providerConfigs, modelCatalog) { configs, catalog ->
+                configs.filter { it.enabled && it.hasApiKey && catalog[it.id].isNullOrEmpty() }.map { it.id }
+            }.collect { missing ->
+                missing.filter(autoLoadAttempted::add).forEach { loadModels(it, silent = true) }
             }
         }
     }
@@ -255,17 +307,38 @@ class ChatViewModel @Inject constructor(
         searchQuery.value = query
     }
 
-    fun selectProviderConfig(configId: String) {
+    /**
+     * Provider and model move together in one call. The old picker set them separately, which
+     * meant selecting a provider first blanked the model and left the chat unsendable until a
+     * second tap landed — there is no useful intermediate state to expose.
+     */
+    fun selectModel(configId: String, modelId: String) {
         selectedConfigId.value = configId
-        selectedModelId.value = null
-    }
-
-    fun selectModel(modelId: String) {
         selectedModelId.value = modelId
-        val configId = selectedConfigId.value ?: return
         viewModelScope.launch {
             userPreferencesRepository.setDefaultProviderConfig(configId)
             userPreferencesRepository.setDefaultModel(modelId)
+        }
+    }
+
+    /**
+     * Fetches and caches one key's model catalog. [silent] is for the unprompted background fetch
+     * — a failure there leaves the picker's "Load models" button in place rather than throwing a
+     * snackbar at a user who never asked for anything. An explicit tap does report why it failed.
+     */
+    fun loadModels(configId: String, silent: Boolean = false) {
+        if (configId in loadingModelConfigIds.value) return
+        viewModelScope.launch {
+            loadingModelConfigIds.update { it + configId }
+            try {
+                refreshProviderModelsUseCase(configId).onFailure { error ->
+                    if (!silent) {
+                        errorMessage.value = error.message ?: "Couldn't load this provider's models."
+                    }
+                }
+            } finally {
+                loadingModelConfigIds.update { it - configId }
+            }
         }
     }
 

@@ -16,6 +16,9 @@ import androidx.compose.ui.Modifier
 import com.gecko.core.model.provider.ModelInfo
 import com.gecko.core.model.provider.ProviderId
 import com.gecko.domain.model.curatedForSelection
+import com.gecko.domain.model.detailLine
+import com.gecko.domain.model.friendlyName
+import com.gecko.domain.model.trait
 
 /**
  * Row showing the current selection with a trailing ">" — tapping it navigates to a dedicated
@@ -103,9 +106,11 @@ private fun ShowMoreModelsRow(count: Int, expanded: Boolean, onClick: () -> Unit
 
 @Composable
 private fun ModelRow(model: ModelInfo, selected: Boolean, onClick: () -> Unit) {
+    // Same wording as the in-chat picker, so a model doesn't describe itself two different ways
+    // depending on which screen you reached it from.
     SettingsRow(
-        title = model.displayName,
-        subtitle = "${model.contextWindowTokens.formatContextWindow()} context" + if (model.supportsImages) " · vision" else "",
+        title = model.friendlyName,
+        subtitle = listOfNotNull(model.trait?.label, model.detailLine.ifBlank { null }).joinToString(" · "),
         onClick = onClick,
         trailing = {
             Icon(
@@ -115,11 +120,4 @@ private fun ModelRow(model: ModelInfo, selected: Boolean, onClick: () -> Unit) {
             )
         },
     )
-}
-
-private fun Int.formatContextWindow(): String = when {
-    this <= 0 -> "Unknown"
-    this >= 1_000_000 -> "${this / 1_000_000}M"
-    this >= 1_000 -> "${this / 1_000}K"
-    else -> toString()
 }

@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.gecko.core.model.provider.ProviderConfig
+import com.gecko.domain.model.friendlyName
 import com.gecko.feature.settings.component.SettingsContentPadding
 import com.gecko.feature.settings.component.SettingsRow
 import com.gecko.feature.settings.component.SettingsTopBar
@@ -49,7 +50,7 @@ fun ModelPreferencesScreen(
             return@Scaffold
         }
 
-        val defaultModelName = uiState.modelsForDefaultProvider.find { it.modelId == uiState.defaultModelId }?.displayName
+        val defaultModelName = uiState.modelsForDefaultProvider.find { it.modelId == uiState.defaultModelId }?.friendlyName
 
         LazyColumn(modifier = Modifier.fillMaxSize().padding(innerPadding), contentPadding = SettingsContentPadding) {
             items(uiState.enabledProviders, key = { it.id }) { config ->
