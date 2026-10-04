@@ -72,7 +72,11 @@ class ProviderConfigRepositoryImpl @Inject constructor(
     }
 
     override suspend fun setBaseUrlOverride(id: String, baseUrl: String?) = withContext(dispatchers.io) {
-        updateConfig(id) { it.copy(baseUrlOverride = baseUrl) }
+        updateConfig(id) { it.copy(baseUrlOverride = baseUrl, verifiedModelId = null, connectionStatus = "UNTESTED") }
+    }
+
+    override suspend fun setVerifiedModel(id: String, modelId: String?) = withContext(dispatchers.io) {
+        updateConfig(id) { it.copy(verifiedModelId = modelId) }
     }
 
     override suspend fun setConnectionStatus(id: String, status: ConnectionStatus) = withContext(dispatchers.io) {
@@ -113,6 +117,7 @@ class ProviderConfigRepositoryImpl @Inject constructor(
             baseUrlOverride = baseUrlOverride,
             connectionStatus = toConnectionStatus(),
             hasApiKey = secureKeyRepository.hasApiKey(id),
+            verifiedModelId = verifiedModelId,
         )
     }
 }

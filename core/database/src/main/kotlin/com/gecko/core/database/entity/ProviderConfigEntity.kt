@@ -21,4 +21,5 @@ data class ProviderConfigEntity(
     /** `ErrorKind.wireName` for a failed connection test, alongside the provider's own wording. */
     val connectionErrorKind: String?,
     val createdAt: Long,
+    val verifiedModelId: String? = null,
 )

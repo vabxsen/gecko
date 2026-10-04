@@ -24,29 +24,28 @@ import androidx.compose.ui.unit.dp
 import com.gecko.core.designsystem.icon.ProviderLogo
 import com.gecko.core.model.provider.ProviderConfig
 
-/**
- * The always-visible "what am I talking to right now" control in the chat top bar, and the way
- * into [ModelPickerSheet].
- *
- * It shows the model's *display name* rather than its raw id — the id a provider returns
- * ("nvidia/nemotron-3-super-120b-a12b") is unreadable at chip size and means nothing to someone
- * who hasn't memorised that vendor's catalog. With nothing chosen yet it deliberately reads as an
- * unfinished setup step ("Choose a model") in the primary colour, because on a fresh install that
- * is the one tap standing between the user and a working chat.
- */
+/** Switch connections while Gecko manages the model for each key. */
 @Composable
 fun ModelSelectorChip(
     selectedProvider: ProviderConfig?,
     selectedModelLabel: String?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    connecting: Boolean = false,
 ) {
     val hasSelection = selectedProvider != null && selectedModelLabel != null
-    val title = selectedModelLabel ?: "Choose a model"
-    val subtitle = selectedProvider?.let { it.label.ifBlank { it.providerId.displayName } }
+    val connectionName = selectedProvider?.label?.ifBlank { selectedProvider.providerId.displayName }
+    val title = when {
+        connecting -> "Connecting…"
+        hasSelection -> connectionName.orEmpty()
+        connectionName != null -> "Connect $connectionName"
+        else -> "Connect AI"
+    }
 
     Surface(
         onClick = onClick,
+        enabled = enabled && !connecting,
         shape = MaterialTheme.shapes.medium,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         color = if (hasSelection) {
@@ -59,9 +58,9 @@ fun ModelSelectorChip(
             .widthIn(max = 360.dp).heightIn(min = 48.dp)
             .semantics {
                 contentDescription = if (hasSelection) {
-                    "Model: $title from $subtitle. Tap to change."
+                    "Connection: $title. Automatic model. Tap to change connection."
                 } else {
-                    "Choose a model"
+                    "Connect AI"
                 }
             },
     ) {

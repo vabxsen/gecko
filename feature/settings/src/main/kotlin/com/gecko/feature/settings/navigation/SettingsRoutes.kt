@@ -20,11 +20,7 @@ object AddProviderRoute
 @Serializable
 data class ProviderDetailRoute(val configId: String)
 
-/**
- * The one model picker. Replaces ProviderModelSelectionRoute and DefaultModelSelectionRoute, which
- * were separate destinations rendering the same list and writing to two different places — only
- * one of which chat ever read.
- */
+/** Restored back stacks from older versions open connection details instead of a model catalog. */
 @Serializable
 data class ModelSelectionRoute(val configId: String)
 

@@ -86,5 +86,14 @@ object GeckoDatabaseMigrations {
         }
     }
 
-    val ALL: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+    // Legacy catalog selections were never verified with a chat request. Leave the new value
+    // null on upgrade, while preserving keys, preferences and conversations.
+    private val MIGRATION_4_5 = object : Migration(4, 5) {
+        override fun migrate(database: SupportSQLiteDatabase) {
+            database.execSQL("ALTER TABLE `provider_configs` ADD COLUMN `verifiedModelId` TEXT")
+            database.execSQL("UPDATE `provider_configs` SET `connectionStatus` = 'UNTESTED' WHERE `connectionStatus` IN ('SUCCESS', 'TESTING')")
+        }
+    }
+
+    val ALL: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
 }

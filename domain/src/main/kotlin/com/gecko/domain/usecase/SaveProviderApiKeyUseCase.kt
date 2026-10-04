@@ -12,6 +12,7 @@ class SaveProviderApiKeyUseCase @Inject constructor(
 ) {
     suspend operator fun invoke(id: String, apiKey: String) {
         secureKeyRepository.saveApiKey(id, apiKey)
+        providerConfigRepository.setVerifiedModel(id, null)
         providerConfigRepository.setConnectionStatus(id, ConnectionStatus.Untested)
     }
 }

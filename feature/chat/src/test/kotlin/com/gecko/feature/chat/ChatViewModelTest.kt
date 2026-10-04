@@ -16,7 +16,7 @@ import com.gecko.core.testing.fake.FakeProviderConfigRepository
 import com.gecko.core.testing.fake.FakeUserPreferencesRepository
 import com.gecko.core.testing.rule.MainDispatcherRule
 import com.gecko.domain.usecase.EditAndResendMessageUseCase
-import com.gecko.domain.usecase.RefreshProviderModelsUseCase
+import com.gecko.domain.usecase.ConnectProviderUseCase
 import com.gecko.domain.usecase.RegenerateResponseUseCase
 import com.gecko.domain.usecase.SendChatMessageUseCase
 import kotlinx.coroutines.flow.flow
@@ -47,6 +47,7 @@ class ChatViewModelTest {
         val defaultConfigId = defaultProviderId?.let {
             providerConfigRepository.addProvider(it, it.displayName).getOrThrow().also { id ->
                 providerConfigRepository.setHasApiKey(id, true)
+                providerConfigRepository.setVerifiedModel(id, defaultModelId)
             }
         }
         val userPreferencesRepository = FakeUserPreferencesRepository(
@@ -65,7 +66,7 @@ class ChatViewModelTest {
                 conversationRepository,
                 SendChatMessageUseCase(conversationRepository, chatCompletionRepository),
             ),
-            refreshProviderModelsUseCase = RefreshProviderModelsUseCase(chatCompletionRepository, providerConfigRepository),
+            connectProviderUseCase = ConnectProviderUseCase(chatCompletionRepository, providerConfigRepository, userPreferencesRepository),
         )
     }
 
@@ -318,63 +319,86 @@ class ChatViewModelTest {
     }
 
     @Test
-    fun choosingAModelFromOutsideTheCuratedShortlistIsNotRevertedToTheDefault() = runTest {
-        val providerConfigRepository = FakeProviderConfigRepository()
-        val viewModel = buildViewModel(
-            providerConfigRepository = providerConfigRepository,
-            defaultProviderId = null,
-            defaultModelId = null,
-        )
-        backgroundScope.launch { viewModel.uiState.collect {} }
-        val configId = providerConfigRepository.addGoogleKeyWith("gemini-pro-latest", "gemini-experimental-x")
+    fun aCatalogAloneNeverActivatesAnUntestedModel() = runTest {
+        val providers = FakeProviderConfigRepository()
+        val vm = buildViewModel(providerConfigRepository = providers, defaultProviderId = null, defaultModelId = null)
+        backgroundScope.launch { vm.uiState.collect {} }
+        providers.addGoogleKeyWith("gemini-pro-latest", "gemini-experimental-x")
         advanceUntilIdle()
-
-        viewModel.selectModel(configId, "gemini-experimental-x")
-        advanceUntilIdle()
-
-        assertEquals(configId, viewModel.uiState.value.selectedConfigId)
-        assertEquals("gemini-experimental-x", viewModel.uiState.value.selectedModelId)
+        assertNull(vm.uiState.value.selectedModelId)
+        assertFalse(vm.uiState.value.canSend)
     }
 
     @Test
-    fun aModelTheProviderNoLongerOffersFallsBackToTheCuratedDefault() = runTest {
-        val providerConfigRepository = FakeProviderConfigRepository()
-        val viewModel = buildViewModel(
-            providerConfigRepository = providerConfigRepository,
-            defaultProviderId = null,
-            defaultModelId = null,
-        )
-        backgroundScope.launch { viewModel.uiState.collect {} }
-        val configId = providerConfigRepository.addGoogleKeyWith("gemini-pro-latest", "gemini-experimental-x")
+    fun switchingToVerifiedConnectionDoesNotProbeOrPickFromItsCatalog() = runTest {
+        val providers = FakeProviderConfigRepository()
+        val chat = FakeChatCompletionRepository()
+        val vm = buildViewModel(providerConfigRepository = providers, chatCompletionRepository = chat)
+        backgroundScope.launch { vm.uiState.collect {} }
+        val id = providers.addGoogleKeyWith("gemini-pro-latest", "gemini-experimental-x")
+        providers.setVerifiedModel(id, "gemini-experimental-x")
+        providers.setConnectionStatus(id, com.gecko.core.model.provider.ConnectionStatus.Success)
         advanceUntilIdle()
-
-        viewModel.selectModel(configId, "gemini-experimental-x")
+        vm.selectConnection(id)
         advanceUntilIdle()
-        // The provider retires that id on its next catalog refresh.
-        providerConfigRepository.saveModels(configId, listOf(geminiModel("gemini-pro-latest")))
-        advanceUntilIdle()
-
-        assertEquals("gemini-pro-latest", viewModel.uiState.value.selectedModelId)
+        assertEquals(id, vm.uiState.value.selectedConfigId)
+        assertEquals("gemini-experimental-x", vm.uiState.value.selectedModelId)
+        assertNull(chat.lastRequest)
     }
 
     @Test
-    fun aFirstProviderWithNothingSelectedGetsAdoptedAutomatically() = runTest {
-        val providerConfigRepository = FakeProviderConfigRepository()
-        val viewModel = buildViewModel(
-            providerConfigRepository = providerConfigRepository,
-            defaultProviderId = null,
-            defaultModelId = null,
+    fun failedConnectionSwitchPreservesTheWorkingSelection() = runTest {
+        val providers = FakeProviderConfigRepository()
+        val chat = FakeChatCompletionRepository(fetchModelsResult = Result.failure(IllegalStateException("Offline")))
+        val vm = buildViewModel(providerConfigRepository = providers, chatCompletionRepository = chat)
+        backgroundScope.launch { vm.uiState.collect {} }
+        val id = providers.addGoogleKeyWith("gemini-pro-latest")
+        advanceUntilIdle()
+        val previous = vm.uiState.value.selectedConfigId
+        vm.selectConnection(id)
+        advanceUntilIdle()
+        assertEquals(previous, vm.uiState.value.selectedConfigId)
+        assertEquals("gpt-4o", vm.uiState.value.selectedModelId)
+        assertEquals(id, vm.uiState.value.error?.configId)
+        assertTrue(vm.uiState.value.loadingModelConfigIds.isEmpty())
+    }
+
+    @Test
+    fun retryingAConnectionErrorChecksTheKeyAgainWithoutCreatingAChat() = runTest {
+        val providers = FakeProviderConfigRepository()
+        val conversations = FakeConversationRepository()
+        var attempts = 0
+        val chat = FakeChatCompletionRepository(
+            fetchModelsResult = Result.success(listOf(geminiModel("gemini-pro-latest"))),
+            flowBuilder = {
+                attempts++
+                kotlinx.coroutines.flow.flowOf(ChatEvent.Error(GeckoError(ErrorKind.Offline)))
+            },
         )
-        backgroundScope.launch { viewModel.uiState.collect {} }
+        val vm = buildViewModel(providerConfigRepository = providers, conversationRepository = conversations,
+            chatCompletionRepository = chat, defaultProviderId = null, defaultModelId = null)
+        backgroundScope.launch { vm.uiState.collect {} }
+        val id = providers.addGoogleKeyWith("gemini-pro-latest")
         advanceUntilIdle()
-        assertNull(viewModel.uiState.value.selectedModelId)
-
-        val configId = providerConfigRepository.addGoogleKeyWith("gemini-pro-latest", "gemini-experimental-x")
+        vm.selectConnection(id)
         advanceUntilIdle()
+        vm.dismissError()
+        vm.retryAfterError()
+        advanceUntilIdle()
+        assertEquals(2, attempts)
+        assertTrue(vm.uiState.value.messages.isEmpty())
+        assertNull(vm.uiState.value.currentConversationId)
+    }
 
-        assertEquals(configId, viewModel.uiState.value.selectedConfigId)
-        assertEquals("gemini-pro-latest", viewModel.uiState.value.selectedModelId)
-        assertEquals(true, viewModel.uiState.value.canSend)
+    @Test
+    fun missingCatalogNeverReplacesTheVerifiedModel() = runTest {
+        val providers = FakeProviderConfigRepository()
+        val vm = buildViewModel(providerConfigRepository = providers)
+        backgroundScope.launch { vm.uiState.collect {} }
+        advanceUntilIdle()
+        providers.saveModels(vm.uiState.value.selectedConfigId!!, listOf(geminiModel("another-model")))
+        advanceUntilIdle()
+        assertEquals("gpt-4o", vm.uiState.value.selectedModelId)
     }
 
     @Test
@@ -401,7 +425,7 @@ class ChatViewModelTest {
     }
 
     @Test
-    fun aKeyWithNoCachedCatalogIsFetchedInTheBackground() = runTest {
+    fun anUnverifiedConnectionIsCheckedOnlyWhenChosen() = runTest {
         val providerConfigRepository = FakeProviderConfigRepository()
         val chatCompletionRepository = FakeChatCompletionRepository(
             fetchModelsResult = Result.success(listOf(geminiModel("gemini-pro-latest"))),
@@ -417,6 +441,11 @@ class ChatViewModelTest {
         providerConfigRepository.setHasApiKey(configId, true)
         advanceUntilIdle()
 
+        assertNull(chatCompletionRepository.lastRequest)
+        assertNull(viewModel.uiState.value.selectedModelId)
+        viewModel.selectConnection(configId)
+        advanceUntilIdle()
+        assertEquals("gemini-pro-latest", viewModel.uiState.value.selectedModelId)
         assertEquals(
             listOf("gemini-pro-latest"),
             viewModel.uiState.value.modelCatalog[configId]?.map { it.modelId },

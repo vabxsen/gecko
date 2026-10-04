@@ -11,12 +11,9 @@ import com.gecko.core.model.provider.ProviderId
 import com.gecko.core.model.error.GeckoException
 import com.gecko.domain.error.copyForUser
 import com.gecko.domain.repository.ProviderConfigRepository
-import com.gecko.core.model.preferences.UserPreferences
 import com.gecko.domain.repository.SecureKeyRepository
-import com.gecko.domain.repository.UserPreferencesRepository
-import com.gecko.domain.usecase.RefreshProviderModelsUseCase
 import com.gecko.domain.usecase.SaveProviderApiKeyUseCase
-import com.gecko.domain.usecase.TestProviderConnectionUseCase
+import com.gecko.domain.usecase.ConnectProviderUseCase
 import com.gecko.feature.settings.navigation.ProviderDetailRoute
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -32,12 +29,11 @@ data class ProviderDetailUiState(
     val id: String,
     val config: ProviderConfig? = null,
     val availableModels: List<ModelInfo> = emptyList(),
-    val isLoadingModels: Boolean = false,
     val isSavingKey: Boolean = false,
     val apiKeyValue: String? = null,
     val isApiKeyLoaded: Boolean = false,
     val saveKeyErrorMessage: String? = null,
-    /** The app-wide model, shown here only when this is the key it belongs to. */
+    /** The model verified for this connection, independent of the currently active key. */
     val selectedModelId: String? = null,
     val isLoading: Boolean = true,
 ) {
@@ -53,7 +49,6 @@ private data class KeyEditingState(
     val value: String?,
     val loaded: Boolean,
     val error: String?,
-    val prefs: UserPreferences,
 )
 
 @HiltViewModel
@@ -62,15 +57,12 @@ class ProviderDetailViewModel @Inject constructor(
     private val providerConfigRepository: ProviderConfigRepository,
     private val secureKeyRepository: SecureKeyRepository,
     private val saveProviderApiKeyUseCase: SaveProviderApiKeyUseCase,
-    private val userPreferencesRepository: UserPreferencesRepository,
-    private val testProviderConnectionUseCase: TestProviderConnectionUseCase,
-    private val refreshProviderModelsUseCase: RefreshProviderModelsUseCase,
+    private val connectProviderUseCase: ConnectProviderUseCase,
 ) : ViewModel() {
 
     private val id: String = savedStateHandle.get<String>("configId")
         ?: savedStateHandle.toRoute<ProviderDetailRoute>().configId
 
-    private val isLoadingModels = MutableStateFlow(false)
     private val isSavingKey = MutableStateFlow(false)
 
     // The stored key is fetched once up front (and refreshed in-place on save/clear) rather than
@@ -89,30 +81,26 @@ class ProviderDetailViewModel @Inject constructor(
     val uiState: StateFlow<ProviderDetailUiState> = combine(
         providerConfigRepository.observe(id),
         providerConfigRepository.observeModels(id),
-        isLoadingModels,
         isSavingKey,
         // Grouped because combine only has typed overloads up to five flows, and the untyped
         // vararg version loses every type in the lambda.
-        combine(apiKeyValue, isApiKeyLoaded, saveKeyErrorMessage, userPreferencesRepository.userPreferences, ::KeyEditingState),
-    ) { config, models, loadingModels, savingKey, keyState ->
+        combine(apiKeyValue, isApiKeyLoaded, saveKeyErrorMessage, ::KeyEditingState),
+    ) { config, models, savingKey, keyState ->
         ProviderDetailUiState(
             id = id,
             config = config,
             availableModels = models,
-            isLoadingModels = loadingModels,
             isSavingKey = savingKey,
             apiKeyValue = keyState.value,
             isApiKeyLoaded = keyState.loaded,
             saveKeyErrorMessage = keyState.error,
-            // Reads the preference chat actually uses, rather than the per-config column that
-            // nothing outside this screen ever looked at.
-            selectedModelId = keyState.prefs.defaultModelId
-                .takeIf { keyState.prefs.defaultProviderConfigId == id },
+            selectedModelId = config?.verifiedModelId,
             isLoading = false,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProviderDetailUiState(id = id))
 
     fun setEnabled(enabled: Boolean) {
+        if (isSavingKey.value) return
         viewModelScope.launch { providerConfigRepository.setEnabled(id, enabled) }
     }
 
@@ -131,12 +119,12 @@ class ProviderDetailViewModel @Inject constructor(
             try {
                 saveProviderApiKeyUseCase(id, trimmed)
                 apiKeyValue.value = trimmed
-                testProviderConnectionUseCase(id)
-                refreshProviderModelsUseCase(id)
+                connectProviderUseCase(id).getOrThrow()
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                saveKeyErrorMessage.value = "Couldn't save or check this key. Please try again."
+                saveKeyErrorMessage.value = (error as? GeckoException)?.error?.copyForUser()?.explanation
+                    ?: "Couldn't save or check this key. Please try again."
             } finally {
                 isSavingKey.value = false
             }
@@ -147,6 +135,7 @@ class ProviderDetailViewModel @Inject constructor(
         if (isSavingKey.value) return
         viewModelScope.launch {
             secureKeyRepository.clearApiKey(id)
+            providerConfigRepository.setVerifiedModel(id, null)
             providerConfigRepository.setConnectionStatus(id, ConnectionStatus.Untested)
             apiKeyValue.value = null
             saveKeyErrorMessage.value = null
@@ -155,36 +144,29 @@ class ProviderDetailViewModel @Inject constructor(
 
     fun testConnection() {
         if (isSavingKey.value || uiState.value.connectionStatus == ConnectionStatus.Testing) return
-        viewModelScope.launch { testProviderConnectionUseCase(id) }
-    }
-
-    fun refreshModels() {
-        if (isLoadingModels.value) return
-        isLoadingModels.value = true
+        isSavingKey.value = true
         saveKeyErrorMessage.value = null
         viewModelScope.launch {
-            try {
-                refreshProviderModelsUseCase(id).onFailure { error ->
-                    saveKeyErrorMessage.value = (error as? GeckoException)?.error?.copyForUser()?.explanation
-                        ?: "Couldn't load models. Please try again."
-                }
-            } finally {
-                isLoadingModels.value = false
-            }
+            try { connectProviderUseCase(id) }
+            finally { isSavingKey.value = false }
         }
     }
 
     fun setBaseUrlOverride(url: String?) {
         if (isSavingKey.value) return
+        isSavingKey.value = true
+        saveKeyErrorMessage.value = null
         viewModelScope.launch {
-            providerConfigRepository.setBaseUrlOverride(id, url?.trim()?.trimEnd('/')?.ifBlank { null })
-            providerConfigRepository.saveModels(id, emptyList())
-            providerConfigRepository.setConnectionStatus(id, ConnectionStatus.Untested)
-            refreshModels()
+            try {
+                providerConfigRepository.setBaseUrlOverride(id, url?.trim()?.trimEnd('/')?.ifBlank { null })
+                providerConfigRepository.saveModels(id, emptyList())
+                connectProviderUseCase(id)
+            } finally { isSavingKey.value = false }
         }
     }
 
     fun deleteProvider(onDeleted: () -> Unit) {
+        if (isSavingKey.value) return
         viewModelScope.launch {
             providerConfigRepository.removeProvider(id)
             onDeleted()

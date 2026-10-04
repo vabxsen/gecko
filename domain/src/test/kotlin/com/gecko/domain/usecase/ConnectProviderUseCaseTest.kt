@@ -34,16 +34,18 @@ class ConnectProviderUseCaseTest {
         var fetches = 0
         var cancel = false
         var hang = false
+        var stalledModel: String? = null
+        var lastStream: Boolean? = null
         var empty = false
         override suspend fun fetchModels(configId: String): Result<List<ModelInfo>> { fetches++; return Result.success(models) }
         override suspend fun testConnection(configId: String) = error("Setup must test its chosen model")
         override suspend fun sendMessage(configId: String, modelId: String, history: List<ChatMessage>, stream: Boolean): Flow<ChatEvent> {
-            assertTrue(stream)
+            lastStream = stream
             assertEquals(1, history.size)
             assertEquals(MessageRole.USER, history.single().role)
             requested += modelId
             if (cancel) throw CancellationException("User left setup")
-            if (hang) return flow { awaitCancellation() }
+            if (hang || modelId == stalledModel) return flow { awaitCancellation() }
             errors[modelId]?.let { return flowOf(ChatEvent.Error(GeckoError(it))) }
             return if (empty) flowOf(ChatEvent.Completed(FinishReason.STOP, null))
                 else flowOf(ChatEvent.ContentDelta("OK"), ChatEvent.Completed(FinishReason.STOP, null))
@@ -60,6 +62,7 @@ class ConnectProviderUseCaseTest {
         assertEquals(listOf(fast.modelId, alternative.modelId), chat.requested)
         assertEquals(1, chat.fetches)
         assertEquals(alternative.modelId, prefs.userPreferences.value.defaultModelId)
+        assertEquals(alternative.modelId, providers.currentConfig(id)?.verifiedModelId)
         assertEquals(ConnectionStatus.Success, providers.currentStatus(id))
     }
 
@@ -97,7 +100,7 @@ class ConnectProviderUseCaseTest {
         val chat = Chat(listOf(fast)).apply { hang = true }
         val result = ConnectProviderUseCase(chat, providers, FakeUserPreferencesRepository())(id)
         assertEquals(ErrorKind.Offline, (result.exceptionOrNull() as GeckoException).error.kind)
-        assertEquals(45_000, testScheduler.currentTime)
+        assertEquals(20_000, testScheduler.currentTime)
     }
 
     @Test fun cancellationIsNotReportedAsAConnectionFailure() = runTest {
@@ -106,5 +109,23 @@ class ConnectProviderUseCaseTest {
         val chat = Chat(listOf(fast)).apply { cancel = true }
         val result = runCatching { ConnectProviderUseCase(chat, providers, FakeUserPreferencesRepository())(id) }
         assertTrue(result.exceptionOrNull() is CancellationException)
+        assertEquals(ConnectionStatus.Untested, providers.currentStatus(id))
+    }
+
+    @Test fun slowCandidateDoesNotPreventTryingTheNextModel() = runTest {
+        val providers = FakeProviderConfigRepository()
+        val id = providers.addProvider(ProviderId.OPENAI, "OpenAI").getOrThrow()
+        val chat = Chat(listOf(fast, alternative)).apply { stalledModel = fast.modelId }
+        val result = ConnectProviderUseCase(chat, providers, FakeUserPreferencesRepository())(id).getOrThrow()
+        assertEquals(alternative.modelId, result.modelId)
+        assertEquals(20_000, testScheduler.currentTime)
+    }
+
+    @Test fun nonStreamingModelIsVerifiedWithoutRequestingStreaming() = runTest {
+        val providers = FakeProviderConfigRepository()
+        val id = providers.addProvider(ProviderId.OPENAI, "OpenAI").getOrThrow()
+        val chat = Chat(listOf(fast.copy(supportsStreaming = false)))
+        assertTrue(ConnectProviderUseCase(chat, providers, FakeUserPreferencesRepository())(id).isSuccess)
+        assertEquals(false, chat.lastStream)
     }
 }

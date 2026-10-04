@@ -52,7 +52,11 @@ class FakeProviderConfigRepository : ProviderConfigRepository {
     }
 
     override suspend fun setBaseUrlOverride(id: String, baseUrl: String?) {
-        updateConfig(id) { it.copy(baseUrlOverride = baseUrl) }
+        updateConfig(id) { it.copy(baseUrlOverride = baseUrl, verifiedModelId = null, connectionStatus = ConnectionStatus.Untested) }
+    }
+
+    override suspend fun setVerifiedModel(id: String, modelId: String?) {
+        updateConfig(id) { it.copy(verifiedModelId = modelId) }
     }
 
     override suspend fun setConnectionStatus(id: String, status: ConnectionStatus) {

@@ -6,7 +6,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-private val baseFontFamily = FontFamily.Default
+private val baseFontFamily = FontFamily.SansSerif
 
 val GeckoTypography = Typography(
     displayLarge = TextStyle(
@@ -28,14 +28,14 @@ val GeckoTypography = Typography(
         fontWeight = FontWeight.SemiBold,
         fontSize = 30.sp,
         lineHeight = 38.sp,
-        letterSpacing = (-0.6).sp,
+        letterSpacing = (-0.25).sp,
     ),
     headlineMedium = TextStyle(
         fontFamily = baseFontFamily,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 26.sp,
-        lineHeight = 34.sp,
-        letterSpacing = (-0.4).sp,
+        fontSize = 24.sp,
+        lineHeight = 32.sp,
+        letterSpacing = 0.sp,
     ),
     headlineSmall = TextStyle(
         fontFamily = baseFontFamily,
@@ -68,14 +68,14 @@ val GeckoTypography = Typography(
         fontWeight = FontWeight.Normal,
         fontSize = 16.sp,
         lineHeight = 24.sp,
-        letterSpacing = 0.15.sp,
+        letterSpacing = 0.sp,
     ),
     bodyMedium = TextStyle(
         fontFamily = baseFontFamily,
         fontWeight = FontWeight.Normal,
         fontSize = 14.sp,
         lineHeight = 21.sp,
-        letterSpacing = 0.15.sp,
+        letterSpacing = 0.sp,
     ),
     bodySmall = TextStyle(
         fontFamily = baseFontFamily,

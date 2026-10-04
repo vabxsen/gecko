@@ -61,11 +61,7 @@ import com.gecko.core.model.chat.MessageStatus
 @Composable
 fun MessageBubble(
     message: ChatMessage,
-    /**
-     * How much of [ChatMessage.content] to show. Equal to the full content for everything except
-     * a reply still being revealed word by word — see `rememberTypewriterText`, which is driven
-     * from [MessageList] so the list's auto-scroll can follow the same steps.
-     */
+    /** The latest persisted text, including partial streaming replies. */
     visibleContent: String,
     isEditing: Boolean,
     isLastAssistantMessage: Boolean,

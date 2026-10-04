@@ -8,9 +8,8 @@ import com.gecko.core.testing.fake.FakeProviderConfigRepository
 import com.gecko.core.testing.fake.FakeSecureKeyRepository
 import com.gecko.core.testing.fake.FakeUserPreferencesRepository
 import com.gecko.core.testing.rule.MainDispatcherRule
-import com.gecko.domain.usecase.RefreshProviderModelsUseCase
 import com.gecko.domain.usecase.SaveProviderApiKeyUseCase
-import com.gecko.domain.usecase.TestProviderConnectionUseCase
+import com.gecko.domain.usecase.ConnectProviderUseCase
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -27,16 +26,44 @@ class ProviderDetailViewModelTest {
     val main = MainDispatcherRule(StandardTestDispatcher())
 
     @Test
+    fun replacingAKeyDoesNotReuseItsOldModelWhenVerificationFails() = runTest {
+        val providers = FakeProviderConfigRepository()
+        val keys = FakeSecureKeyRepository()
+        val prefs = FakeUserPreferencesRepository()
+        val model = com.gecko.core.model.provider.ModelInfo(ProviderId.OPENAI, "gpt-4o-mini", "GPT", 128000, true, true)
+        val chat = FakeChatCompletionRepository(
+            fetchModelsResult = Result.success(listOf(model)),
+            flowBuilder = { kotlinx.coroutines.flow.flowOf(com.gecko.core.model.chat.ChatEvent.Error(
+                com.gecko.core.model.error.GeckoError(com.gecko.core.model.error.ErrorKind.InvalidApiKey))) },
+        )
+        val id = providers.addProvider(ProviderId.OPENAI, "OpenAI").getOrThrow()
+        keys.saveApiKey(id, "old-key")
+        providers.setVerifiedModel(id, "old-model")
+        val viewModel = ProviderDetailViewModel(SavedStateHandle(mapOf("configId" to id)), providers, keys,
+            SaveProviderApiKeyUseCase(keys, providers), ConnectProviderUseCase(chat, providers, prefs))
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        advanceUntilIdle()
+        viewModel.saveApiKey("replacement-key")
+        advanceUntilIdle()
+        assertEquals(null, providers.currentConfig(id)?.verifiedModelId)
+        assertTrue(viewModel.uiState.value.connectionStatus is ConnectionStatus.Failure)
+        assertFalse(viewModel.uiState.value.isSavingKey)
+        assertTrue(viewModel.uiState.value.saveKeyErrorMessage != null)
+    }
+
+    @Test
     fun savedKeyLoadsBeforeTheEditorIsEnabledAndCanBeReplaced() = runTest {
         val providers = FakeProviderConfigRepository()
         val keys = FakeSecureKeyRepository()
-        val chat = FakeChatCompletionRepository()
+        val model = com.gecko.core.model.provider.ModelInfo(ProviderId.OPENAI, "gpt-4o-mini", "GPT", 128000, true, true)
+        val chat = FakeChatCompletionRepository(fetchModelsResult = Result.success(listOf(model)))
+        val prefs = FakeUserPreferencesRepository()
         val id = providers.addProvider(ProviderId.OPENAI, "OpenAI").getOrThrow()
         keys.saveApiKey(id, "old-key")
         val viewModel = ProviderDetailViewModel(
             SavedStateHandle(mapOf("configId" to id)), providers, keys,
-            SaveProviderApiKeyUseCase(keys, providers), FakeUserPreferencesRepository(),
-            TestProviderConnectionUseCase(chat, providers), RefreshProviderModelsUseCase(chat, providers),
+            SaveProviderApiKeyUseCase(keys, providers),
+            ConnectProviderUseCase(chat, providers, prefs),
         )
         assertTrue(viewModel.uiState.value.isLoading)
         backgroundScope.launch { viewModel.uiState.collect {} }
@@ -52,5 +79,8 @@ class ProviderDetailViewModelTest {
         assertEquals("new-key", keys.getApiKey(id))
         assertEquals(ConnectionStatus.Success, viewModel.uiState.value.connectionStatus)
         assertFalse(viewModel.uiState.value.isSavingKey)
+        assertEquals(model.modelId, chat.lastRequest?.second)
+        assertEquals(model.modelId, providers.currentConfig(id)?.verifiedModelId)
+        assertEquals(model.modelId, prefs.userPreferences.value.defaultModelId)
     }
 }

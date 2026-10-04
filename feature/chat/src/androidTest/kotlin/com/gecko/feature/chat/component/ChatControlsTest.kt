@@ -67,21 +67,32 @@ class ChatControlsTest {
         compose.runOnIdle { assertEquals(true, fixed); assertEquals(true, dismissed) }
     }
 
-    @Test fun modelSearchClearAndSelectionReachTheChosenModel() {
-        val provider = ProviderConfig("key", ProviderId.OPENAI, "Test connection", true, null, ConnectionStatus.Success, true)
-        val models = (1..12).map { ModelInfo(ProviderId.OPENAI, "test-$it", "Test model $it", 8192, true, false) }
+    @Test fun aLargeCatalogStillShowsOnlyOneConnectionAndNoModelPicker() {
+        val provider = ProviderConfig("key", ProviderId.OPENAI, "Test connection", true, null, ConnectionStatus.Success, true,
+            verifiedModelId = "test-1")
+        val models = (1..50).map { ModelInfo(ProviderId.OPENAI, "test-$it", "Test model $it", 8192, true, false) }
         var selection = ""
         compose.setContent { MaterialTheme {
-            ModelPickerSheet(listOf(provider), mapOf("key" to models), emptySet(), "key", null,
-                { key, model -> selection = "$key/$model" }, {}, {}, {})
+            ModelPickerSheet(listOf(provider), mapOf("key" to models), emptySet(), "key",
+                { selection = it }, {}, {})
         } }
-        compose.onNode(hasSetTextAction()).performTextInput("impossible-match")
-        compose.onNodeWithText("No models match", substring = true).assertIsDisplayed()
-        compose.onNodeWithContentDescription("Clear search").performClick()
-        compose.onNode(hasSetTextAction()).performTextInput("test-12")
-        compose.onNodeWithText("Test model 12").performClick()
-        compose.runOnIdle { assertEquals("key/test-12", selection) }
+        compose.onNodeWithText("Your AI").assertIsDisplayed()
+        compose.onNode(hasSetTextAction()).assertDoesNotExist()
+        compose.onNodeWithText("Test model 50", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("Show all", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("Test connection").performClick()
+        compose.runOnIdle { assertEquals("key", selection) }
     }
+
+    @Test fun checkingAConnectionDisablesRepeatedTaps() {
+        val provider = ProviderConfig("key", ProviderId.OPENAI, "Test connection", true, null, ConnectionStatus.Testing, true)
+        compose.setContent { MaterialTheme {
+            ModelPickerSheet(listOf(provider), emptyMap(), setOf("key"), "key", {}, {}, {})
+        } }
+        compose.onNodeWithText("Finding a working model…").assertIsDisplayed()
+        compose.onNodeWithText("Test connection").assertIsNotEnabled()
+    }
+
     @Test fun editIsDisabledDuringGenerationButCopyStillWorks() {
         val message = ChatMessage("user", "chat", MessageRole.USER, "Original draft", Instant.EPOCH, MessageStatus.COMPLETE)
         compose.setContent { MaterialTheme {

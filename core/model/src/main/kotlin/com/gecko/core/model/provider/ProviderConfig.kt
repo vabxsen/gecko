@@ -8,4 +8,6 @@ data class ProviderConfig(
     val baseUrlOverride: String?,
     val connectionStatus: ConnectionStatus,
     val hasApiKey: Boolean,
+    /** Last model that returned a real chat reply with this key and endpoint. */
+    val verifiedModelId: String? = null,
 )

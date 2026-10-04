@@ -4,7 +4,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Box
@@ -87,9 +86,13 @@ fun ChatScreen(
             onFix = {
                 viewModel.dismissError()
                 when (copy.fix) {
-                    ErrorFix.Retry -> viewModel.regenerate()
+                    ErrorFix.Retry -> viewModel.retryAfterError()
                     ErrorFix.OpenProviderKey -> onOpenSettings()
-                    ErrorFix.PickAnotherModel -> modelPickerVisible = true
+                    ErrorFix.PickAnotherModel -> {
+                        val configId = error.configId ?: uiState.selectedConfigId
+                        if (configId != null) viewModel.selectConnection(configId, reconnect = true)
+                        else modelPickerVisible = true
+                    }
                     ErrorFix.StartNewChat -> startNewChat()
                     ErrorFix.None -> Unit
                 }
@@ -208,19 +211,14 @@ private fun ChatContent(
     // still needs a little breathing room above the keyboard rather than sitting flush on it.
     var suggestedPrompt by remember { mutableStateOf<String?>(null) }
     val imeVisible = WindowInsets.isImeVisible
-    val composerBottomPadding by animateDpAsState(
-        targetValue = if (imeVisible) 8.dp else 16.dp,
-        label = "composerBottomPadding",
-    )
+    val composerBottomPadding = if (imeVisible) 8.dp else 16.dp
     if (modelPickerVisible) {
         ModelPickerSheet(
             providers = uiState.enabledProviders,
             modelCatalog = uiState.modelCatalog,
             loadingConfigIds = uiState.loadingModelConfigIds,
             selectedConfigId = uiState.selectedConfigId,
-            selectedModelId = uiState.selectedModelId,
-            onSelect = viewModel::selectModel,
-            onLoadModels = { configId -> viewModel.loadModels(configId) },
+            onSelect = { configId -> viewModel.selectConnection(configId) },
             onOpenSettings = onOpenSettings,
             onDismiss = onHideModelPicker,
         )
@@ -242,6 +240,8 @@ private fun ChatContent(
                             selectedProvider = uiState.selectedProvider,
                             selectedModelLabel = uiState.selectedModelLabel,
                             onClick = onShowModelPicker,
+                            enabled = !uiState.isGenerating,
+                            connecting = uiState.loadingModelConfigIds.isNotEmpty(),
                         )
                     }
                 },
@@ -272,14 +272,20 @@ private fun ChatContent(
     ) { innerPadding ->
         Crossfade(
             targetState = uiState.messages.isEmpty(),
-            animationSpec = tween(GeckoMotion.DURATION_EMPHASIZED, easing = GeckoMotion.EasingStandard),
+            animationSpec = tween(GeckoMotion.DURATION_QUICK, easing = GeckoMotion.EasingStandard),
             label = "chatContentCrossfade",
         ) { isEmpty ->
             if (isEmpty) {
                 if (!imeVisible) {
                     EmptyChatState(
-                        needsConnection = uiState.enabledProviders.isEmpty(),
-                        onConnect = onConnectProvider,
+                        needsConnection = uiState.selectedModelId == null,
+                        hasSavedConnection = uiState.enabledProviders.isNotEmpty(),
+                        onConnect = {
+                            val configId = uiState.selectedConfigId
+                            if (uiState.enabledProviders.isEmpty()) onConnectProvider()
+                            else if (configId != null) viewModel.selectConnection(configId)
+                            else onShowModelPicker()
+                        },
                         onPromptSelected = { suggestedPrompt = it },
                         modifier = Modifier.padding(innerPadding),
                     )

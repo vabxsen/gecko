@@ -36,10 +36,9 @@ class ChatCompletionRepositoryImpl @Inject constructor(
         if (apiKey.isNullOrBlank()) {
             return flowOf(ChatEvent.Error(config.missingKeyError(configId)))
         }
-        val contextWindowTokens = providerConfigRepository.observeModels(configId).first()
-            .find { it.modelId == modelId }?.contextWindowTokens
-        val budgetedHistory = history.trimToContextBudget(contextWindowTokens)
-        return providerFactory.create(config.providerId, apiKey, config.baseUrlOverride).sendMessage(budgetedHistory, modelId, stream)
+        val model = providerConfigRepository.observeModels(configId).first().find { it.modelId == modelId }
+        val budgetedHistory = history.trimToContextBudget(model?.contextWindowTokens)
+        return providerFactory.create(config.providerId, apiKey, config.baseUrlOverride).sendMessage(budgetedHistory, modelId, stream && model?.supportsStreaming != false)
     }
 
     /**

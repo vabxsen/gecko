@@ -27,6 +27,7 @@ fun EmptyChatState(
     onConnect: () -> Unit = {},
     modifier: Modifier = Modifier,
     onPromptSelected: (String) -> Unit = {},
+    hasSavedConnection: Boolean = false,
 ) {
     BoxWithConstraints(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         val compact = maxHeight < 420.dp
@@ -50,7 +51,8 @@ fun EmptyChatState(
             )
             Spacer(Modifier.height(if (compact) 8.dp else 12.dp))
             Text(
-                if (needsConnection) "Your favorite AI. Your own key." else "What would you like to explore?",
+                if (needsConnection && hasSavedConnection) "Your key is saved. Let's get connected."
+                else if (needsConnection) "Your favorite AI. Your own key." else "What would you like to explore?",
                 style = if (compact) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -58,11 +60,11 @@ fun EmptyChatState(
             Spacer(Modifier.height(if (compact) 16.dp else 32.dp))
             if (needsConnection) {
                 Button(onClick = onConnect, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-                    Text("Connect your AI", Modifier.padding(vertical = 8.dp))
+                    Text(if (hasSavedConnection) "Connect automatically" else "Connect your AI", Modifier.padding(vertical = 8.dp))
                     Icon(Icons.AutoMirrored.Outlined.ArrowForward, null, Modifier.padding(start = 12.dp).size(18.dp))
                 }
                 Spacer(Modifier.height(16.dp))
-                Text("Paste a key. We'll take care of the setup.", style = MaterialTheme.typography.bodySmall,
+                Text(if (hasSavedConnection) "Gecko will check a working model for this key." else "Paste a key. We'll take care of the setup.", style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
             } else {
                 PromptSuggestions(onPromptSelected)

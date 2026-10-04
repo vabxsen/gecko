@@ -96,6 +96,29 @@ class GeckoDatabaseMigrationTest {
         }
     }
 
+    @Test
+    fun migratesVersionFourWithoutTreatingCatalogSelectionsAsVerified() {
+        helper.createDatabase(DATABASE_NAME, 4).apply {
+            execSQL("INSERT INTO provider_configs VALUES ('saved-key', 'openai', 'My connection', 1, 'old-model', NULL, 'SUCCESS', NULL, NULL, 10)")
+            execSQL("INSERT INTO conversations VALUES ('saved-chat', 'Keep this chat', 1, 2, 0, 'openai', 'old-model')")
+            close()
+        }
+        helper.runMigrationsAndValidate(DATABASE_NAME, 5, true, *GeckoDatabaseMigrations.ALL).use { database ->
+            database.query("SELECT id, label, selectedModelId, verifiedModelId, connectionStatus FROM provider_configs").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("saved-key", cursor.getString(0))
+                assertEquals("My connection", cursor.getString(1))
+                assertEquals("old-model", cursor.getString(2))
+                assertTrue(cursor.isNull(3))
+                assertEquals("UNTESTED", cursor.getString(4))
+            }
+            database.query("SELECT title FROM conversations WHERE id = 'saved-chat'").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("Keep this chat", cursor.getString(0))
+            }
+        }
+    }
+
     private companion object {
         const val DATABASE_NAME = "migration-test"
     }

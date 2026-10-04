@@ -20,6 +20,7 @@ interface ProviderConfigRepository {
     suspend fun setEnabled(id: String, enabled: Boolean)
     suspend fun setBaseUrlOverride(id: String, baseUrl: String?)
     suspend fun setConnectionStatus(id: String, status: ConnectionStatus)
+    suspend fun setVerifiedModel(id: String, modelId: String?)
 
     fun observeModels(id: String): Flow<List<ModelInfo>>
     suspend fun saveModels(id: String, models: List<ModelInfo>)

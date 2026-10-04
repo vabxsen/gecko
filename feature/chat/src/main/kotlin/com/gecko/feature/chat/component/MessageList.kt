@@ -15,7 +15,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -46,16 +45,9 @@ fun MessageList(
     val lastMessage = messages.lastOrNull()
     val lastMessageId = lastMessage?.id
 
-    // The reply is revealed a word at a time rather than in the slabs the network and the
-    // database-write throttle deliver it in. `key` ties the reveal's progress to the message it
-    // belongs to, so a new reply starts from nothing instead of inheriting the previous one's
-    // position.
-    val lastVisibleContent = key(lastMessageId) {
-        rememberTypewriterText(
-            fullText = lastMessage?.content.orEmpty(),
-            isStreaming = lastMessage?.status == MessageStatus.STREAMING,
-        )
-    }
+    // Persistence already batches stream updates. Render each update immediately instead of
+    // running a second timer that restarts on tokens and keeps typing after completion.
+    val lastVisibleContent = lastMessage?.content.orEmpty()
 
     // `reverseLayout` is what keeps a reply that's being written glued to the bottom of the
     // screen, and it does it structurally rather than by chasing the text with scroll calls.

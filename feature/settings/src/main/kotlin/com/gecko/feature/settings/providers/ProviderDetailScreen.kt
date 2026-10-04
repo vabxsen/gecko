@@ -25,7 +25,7 @@ import com.gecko.domain.model.friendlyName
 import com.gecko.feature.settings.component.*
 
 @Composable
-fun ProviderDetailScreen(onBack: () -> Unit, onOpenModelSelection: () -> Unit, modifier: Modifier = Modifier,
+fun ProviderDetailScreen(onBack: () -> Unit, modifier: Modifier = Modifier,
     viewModel: ProviderDetailViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var apiKey by remember { mutableStateOf("") }
@@ -54,17 +54,13 @@ fun ProviderDetailScreen(onBack: () -> Unit, onOpenModelSelection: () -> Unit, m
                         }
                     }
                     SettingsSwitchRow("Use this connection", state.enabled, viewModel::setEnabled,
-                        subtitle = "Make these models available in chat.")
-                    SettingsSectionHeader("Chat model")
-                    if (state.availableModels.isNotEmpty()) {
-                        ModelSelectorRow(state.availableModels.find { it.modelId == state.selectedModelId }?.friendlyName,
-                            onOpenModelSelection)
-                    } else {
-                        Text("No models loaded yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    TextButton(onClick = viewModel::refreshModels, enabled = state.hasApiKey && !state.isLoadingModels) {
-                        Text(if (state.isLoadingModels) "Loading models…" else "Refresh models")
-                    }
+                        subtitle = "Use this API key for your conversations.")
+                    SettingsSectionHeader("Automatic model")
+                    Text(state.availableModels.find { it.modelId == state.selectedModelId }?.friendlyName
+                        ?: state.selectedModelId ?: "Connect to find a working model.",
+                        style = MaterialTheme.typography.bodyLarge)
+                    Text("Gecko checks a reply before choosing a model for this key.",
+                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     SettingsSectionHeader("API key")
                     SettingsPanel {
                         OutlinedTextField(apiKey, { apiKey = it }, Modifier.fillMaxWidth(), label = { Text("API key") },
@@ -76,16 +72,18 @@ fun ProviderDetailScreen(onBack: () -> Unit, onOpenModelSelection: () -> Unit, m
                                 Icon(if (visible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
                                     if (visible) "Hide key" else "Show key")
                             } })
-                        Button(onClick = { viewModel.saveApiKey(apiKey) }, modifier = Modifier.fillMaxWidth(),
-                            enabled = apiKey.isNotBlank() && apiKey != state.apiKeyValue && !state.isSavingKey) {
-                            Text(if (state.isSavingKey) "Saving…" else "Save key")
-                        }
-                        OutlinedButton(onClick = viewModel::testConnection, modifier = Modifier.fillMaxWidth(),
-                            enabled = state.hasApiKey && !state.isSavingKey && state.connectionStatus != ConnectionStatus.Testing) {
-                            Text(if (state.connectionStatus == ConnectionStatus.Testing) "Testing…" else "Test connection")
+                        Button(onClick = {
+                            if (apiKey.trim() != state.apiKeyValue) viewModel.saveApiKey(apiKey)
+                            else viewModel.testConnection()
+                        }, modifier = Modifier.fillMaxWidth(), enabled = apiKey.isNotBlank() && !state.isSavingKey) {
+                            if (state.isSavingKey) {
+                                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                                Spacer(Modifier.width(10.dp))
+                            }
+                            Text(if (state.isSavingKey) "Connecting…" else if (apiKey.trim() != state.apiKeyValue) "Save and connect" else "Reconnect automatically")
                         }
                         state.saveKeyErrorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                        (state.connectionStatus as? ConnectionStatus.Failure)?.let {
+                        (state.connectionStatus as? ConnectionStatus.Failure)?.takeIf { state.saveKeyErrorMessage == null }?.let {
                             Text(it.error.copyForUser().explanation, color = MaterialTheme.colorScheme.error,
                                 style = MaterialTheme.typography.bodyMedium)
                         }
@@ -114,7 +112,7 @@ fun ProviderDetailScreen(onBack: () -> Unit, onOpenModelSelection: () -> Unit, m
                             }
                         }
                     }
-                    TextButton(onClick = { confirmDelete = true }) {
+                    TextButton(onClick = { confirmDelete = true }, enabled = !state.isSavingKey) {
                         Text("Delete connection", color = MaterialTheme.colorScheme.error)
                     }
                 }

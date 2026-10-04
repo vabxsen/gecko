@@ -1,12 +1,5 @@
 package com.gecko.feature.chat.component
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
@@ -25,7 +18,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import com.gecko.core.designsystem.theme.GeckoMotion
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -49,22 +41,8 @@ fun ChatTopBar(
                 }
             },
             title = {
-                AnimatedContent(
-                    targetState = title,
-                    transitionSpec = {
-                        (slideInVertically(tween(GeckoMotion.DURATION_STANDARD, easing = GeckoMotion.EasingIncoming)) { it / 3 } + fadeIn(tween(GeckoMotion.DURATION_STANDARD)))
-                            .togetherWith(slideOutVertically(tween(GeckoMotion.DURATION_QUICK, easing = GeckoMotion.EasingOutgoing)) { -it / 3 } + fadeOut(tween(GeckoMotion.DURATION_QUICK)))
-                    },
-                    label = "chatTopBarTitle",
-                ) { animatedTitle ->
-                    Text(
-                        text = animatedTitle,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
+                Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
             },
             actions = { IconButton(onClick = onNewChat, enabled = newChatEnabled) {
                 Icon(Icons.Outlined.Edit, contentDescription = "New chat")

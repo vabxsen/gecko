@@ -3,7 +3,6 @@ package com.gecko.feature.settings.navigation
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
-import androidx.navigation.toRoute
 import com.gecko.feature.settings.SettingsListScreen
 import com.gecko.feature.settings.about.AboutScreen
 import com.gecko.feature.settings.appearance.AppearanceScreen
@@ -12,7 +11,6 @@ import com.gecko.feature.settings.privacy.DataPrivacyScreen
 import com.gecko.feature.settings.providers.AddProviderScreen
 import com.gecko.feature.settings.providers.AiProvidersScreen
 import com.gecko.feature.settings.providers.ProviderDetailScreen
-import com.gecko.feature.settings.providers.ModelSelectionScreen
 
 fun NavGraphBuilder.settingsGraph(navController: NavController, onConnected: () -> Unit) {
     composable<SettingsRoute> {
@@ -44,15 +42,13 @@ fun NavGraphBuilder.settingsGraph(navController: NavController, onConnected: () 
             onSaved = { onConnected() },
         )
     }
-    composable<ProviderDetailRoute> { backStackEntry ->
-        val configId = backStackEntry.toRoute<ProviderDetailRoute>().configId
+    composable<ProviderDetailRoute> {
         ProviderDetailScreen(
             onBack = { navController.popBackStack() },
-            onOpenModelSelection = { navController.navigate(ModelSelectionRoute(configId)) },
         )
     }
     composable<ModelSelectionRoute> {
-        ModelSelectionScreen(onBack = { navController.popBackStack() })
+        ProviderDetailScreen(onBack = { navController.popBackStack() })
     }
     composable<DataPrivacyRoute> {
         DataPrivacyScreen(onBack = { navController.popBackStack() })

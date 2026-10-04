@@ -52,5 +52,5 @@ data class ChatUiState(
         get() = selectedModel?.friendlyName ?: selectedModelId
 
     val canSend: Boolean
-        get() = !isGenerating && selectedProvider?.let { it.enabled && it.hasApiKey } == true && selectedModelId != null
+        get() = !isGenerating && loadingModelConfigIds.isEmpty() && selectedProvider?.let { it.enabled && it.hasApiKey } == true && selectedModelId != null
 }

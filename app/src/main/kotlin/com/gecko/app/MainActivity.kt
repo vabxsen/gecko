@@ -7,8 +7,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
@@ -80,19 +78,15 @@ private fun GeckoNavHost() {
         startDestination = ChatRoute,
         modifier = Modifier,
         enterTransition = {
-            slideInHorizontally(tween(GeckoMotion.DURATION_STANDARD, easing = GeckoMotion.EasingIncoming)) { it / 4 } +
                 fadeIn(tween(GeckoMotion.DURATION_STANDARD, easing = GeckoMotion.EasingIncoming))
         },
         exitTransition = {
-            slideOutHorizontally(tween(GeckoMotion.DURATION_STANDARD, easing = GeckoMotion.EasingOutgoing)) { -it / 4 } +
                 fadeOut(tween(GeckoMotion.DURATION_QUICK, easing = GeckoMotion.EasingOutgoing))
         },
         popEnterTransition = {
-            slideInHorizontally(tween(GeckoMotion.DURATION_STANDARD, easing = GeckoMotion.EasingIncoming)) { -it / 4 } +
                 fadeIn(tween(GeckoMotion.DURATION_STANDARD, easing = GeckoMotion.EasingIncoming))
         },
         popExitTransition = {
-            slideOutHorizontally(tween(GeckoMotion.DURATION_STANDARD, easing = GeckoMotion.EasingOutgoing)) { it / 4 } +
                 fadeOut(tween(GeckoMotion.DURATION_QUICK, easing = GeckoMotion.EasingOutgoing))
         },
     ) {

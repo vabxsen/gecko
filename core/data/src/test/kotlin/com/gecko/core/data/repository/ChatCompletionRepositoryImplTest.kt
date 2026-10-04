@@ -78,6 +78,39 @@ class ChatCompletionRepositoryImplTest {
     }
 
     private lateinit var server: MockWebServer
+
+    @Test
+    fun automaticSetupSkipsAnInaccessibleModelUsingRealHttpRequests() = kotlinx.coroutines.runBlocking {
+        val id = configuredKey()
+        val prefs = com.gecko.core.testing.fake.FakeUserPreferencesRepository()
+        server.enqueue(MockResponse().setBody("""{"data":[{"id":"gpt-4o-mini"},{"id":"gpt-4o"}]}"""))
+        server.enqueue(MockResponse().setResponseCode(403).setBody("""{"error":{"message":"Model access denied"}}"""))
+        server.enqueue(MockResponse().setHeader("Content-Type", "text/event-stream")
+            .setBody("data: {\"choices\":[{\"delta\":{\"content\":\"OK\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n"))
+
+        val result = com.gecko.domain.usecase.ConnectProviderUseCase(repository, providerConfigRepository, prefs)(id).getOrThrow()
+        assertEquals("gpt-4o", result.modelId)
+        assertEquals("gpt-4o", providerConfigRepository.currentConfig(id)?.verifiedModelId)
+        assertEquals("gpt-4o", prefs.userPreferences.value.defaultModelId)
+        assertEquals("/v1/models", server.takeRequest().path)
+        assertTrue(server.takeRequest().body.readUtf8().contains("gpt-4o-mini"))
+        assertTrue(server.takeRequest().body.readUtf8().contains("gpt-4o"))
+    }
+
+    @Test
+    fun modelsWithoutStreamingSupportUseARegularCompletion() = runTest {
+        val id = configuredKey()
+        providerConfigRepository.saveModels(id, listOf(com.gecko.core.model.provider.ModelInfo(
+            ProviderId.OPENAI, "test-model", "Test", 8192, false, false)))
+        server.enqueue(MockResponse().setBody("""{"choices":[{"message":{"role":"assistant","content":"Hello"},"finish_reason":"stop"}]}"""))
+        repository.sendMessage(id, "test-model", emptyList(), stream = true).test {
+            assertTrue(awaitItem() is ChatEvent.Started)
+            assertEquals(ChatEvent.ContentDelta("Hello"), awaitItem())
+            assertTrue(awaitItem() is ChatEvent.Completed)
+            awaitComplete()
+        }
+        assertTrue(server.takeRequest().body.readUtf8().contains("\"stream\":false"))
+    }
     private lateinit var secureKeyRepository: FakeSecureKeyRepository
     private lateinit var providerConfigRepository: FakeProviderConfigRepository
     private lateinit var repository: ChatCompletionRepositoryImpl

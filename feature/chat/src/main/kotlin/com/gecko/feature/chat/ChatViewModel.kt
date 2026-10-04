@@ -14,12 +14,11 @@ import com.gecko.core.model.provider.ModelInfo
 import com.gecko.core.model.provider.ProviderConfig
 import com.gecko.core.model.provider.ProviderId
 import com.gecko.core.model.provider.ConnectionStatus
-import com.gecko.domain.model.curatedForSelection
 import com.gecko.domain.repository.ConversationRepository
 import com.gecko.domain.repository.ProviderConfigRepository
 import com.gecko.domain.repository.UserPreferencesRepository
 import com.gecko.domain.usecase.EditAndResendMessageUseCase
-import com.gecko.domain.usecase.RefreshProviderModelsUseCase
+import com.gecko.domain.usecase.ConnectProviderUseCase
 import com.gecko.domain.usecase.RegenerateResponseUseCase
 import com.gecko.domain.usecase.SendChatMessageUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -51,7 +50,7 @@ class ChatViewModel @Inject constructor(
     private val sendChatMessageUseCase: SendChatMessageUseCase,
     private val regenerateResponseUseCase: RegenerateResponseUseCase,
     private val editAndResendMessageUseCase: EditAndResendMessageUseCase,
-    private val refreshProviderModelsUseCase: RefreshProviderModelsUseCase,
+    private val connectProviderUseCase: ConnectProviderUseCase,
 ) : ViewModel() {
 
     private val currentConversationId = MutableStateFlow<String?>(null)
@@ -72,14 +71,8 @@ class ChatViewModel @Inject constructor(
     private val isGenerating = MutableStateFlow(false)
     private val loadingModelConfigIds = MutableStateFlow<Set<String>>(emptySet())
 
-    /**
-     * Configs whose catalog has already been auto-fetched once this session. Without it, a key
-     * that legitimately returns an empty catalog (or is simply offline) would re-trigger the
-     * background fetch on every emission, since its catalog stays empty either way.
-     */
-    private val autoLoadAttempted = mutableSetOf<String>()
-
     private var generationJob: Job? = null
+    private var failedConnectionId: String? = null
 
     private val conversations = searchQuery
         .debounce { if (it.isBlank()) 0L else SEARCH_DEBOUNCE_MS }
@@ -159,43 +152,18 @@ class ChatViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            combine(providerConfigs, selection, modelCatalog) { configs, selection, catalog ->
-                selection ?: return@combine null
-                if (configs.any { it.id == selection.configId && it.connectionStatus == ConnectionStatus.Testing }) {
-                    return@combine null
-                }
-                val modelId = selection.modelId
-                val selected = configs.find { it.id == selection.configId && it.enabled && it.hasApiKey }
-                // Nothing chosen yet — a fresh install, or the chosen key was deleted. Adopt the
-                // first usable key rather than leaving the composer unsendable until the user
-                // finds their way to Settings.
-                val config = selected ?: configs.firstOrNull {
-                    it.enabled && it.hasApiKey && it.connectionStatus != ConnectionStatus.Testing
-                } ?: return@combine null
-                val models = catalog[config.id].orEmpty()
-                // Otherwise only step in when the selection is unusable — no model at all, or one
-                // this provider no longer offers (a retired or renamed id). Anything the catalog
-                // still lists is a deliberate choice, including a model picked from behind "Show
-                // all models", and must not be quietly swapped back to the curated default.
-                if (selected != null && modelId != null && models.any { it.modelId == modelId }) return@combine null
-                val curated = models.curatedForSelection(config.providerId, config.baseUrlOverride)
-                val preferredModel = curated.defaultChoice ?: return@combine null
-                config.id to preferredModel.modelId
+            combine(providerConfigs, selection) { configs, selected ->
+                selected ?: return@combine null
+                if (configs.any { it.connectionStatus == ConnectionStatus.Testing }) return@combine null
+                val available = configs.filter { it.enabled && it.hasApiKey }
+                val config = available.find { it.id == selected.configId }
+                    ?: available.firstOrNull { it.verifiedModelId != null }
+                    ?: available.firstOrNull()
+                val replacement = ModelSelection(config?.id, config?.verifiedModelId)
+                replacement.takeIf { it != selected }
             }.distinctUntilChanged().collect { replacement ->
                 replacement ?: return@collect
-                val (configId, modelId) = replacement
-                userPreferencesRepository.setDefaultSelection(configId, modelId)
-            }
-        }
-        // A key whose catalog was never cached (its fetch failed when the key was saved, or the
-        // app was offline then) would otherwise show up in the picker as an empty section. Fetch
-        // it once per session in the background; the picker's per-provider "Load models" button
-        // is the retry path if this doesn't land.
-        viewModelScope.launch {
-            combine(providerConfigs, modelCatalog) { configs, catalog ->
-                configs.filter { it.enabled && it.hasApiKey && catalog[it.id].isNullOrEmpty() }.map { it.id }
-            }.collect { missing ->
-                missing.filter(autoLoadAttempted::add).forEach { loadModels(it, silent = true) }
+                userPreferencesRepository.setDefaultSelection(replacement.configId, replacement.modelId)
             }
         }
     }
@@ -213,7 +181,7 @@ class ChatViewModel @Inject constructor(
     }
 
     fun sendMessage(text: String, attachmentImageBase64: String? = null): Boolean {
-        if (isGenerating.value) return false
+        if (isGenerating.value || loadingModelConfigIds.value.isNotEmpty()) return false
         val trimmed = text.trim()
         if (trimmed.isEmpty() && attachmentImageBase64 == null) return false
         val configId = selection.value?.configId
@@ -321,30 +289,21 @@ class ChatViewModel @Inject constructor(
         searchQuery.value = query
     }
 
-    /**
-     * Provider and model move together in one call. The old picker set them separately, which
-     * meant selecting a provider first blanked the model and left the chat unsendable until a
-     * second tap landed — there is no useful intermediate state to expose.
-     */
-    fun selectModel(configId: String, modelId: String) {
-        viewModelScope.launch {
-            userPreferencesRepository.setDefaultSelection(configId, modelId)
-        }
-    }
-
-    /**
-     * Fetches and caches one key's model catalog. [silent] is for the unprompted background fetch
-     * — a failure there leaves the picker's "Load models" button in place rather than throwing a
-     * snackbar at a user who never asked for anything. An explicit tap does report why it failed.
-     */
-    fun loadModels(configId: String, silent: Boolean = false) {
-        if (configId in loadingModelConfigIds.value) return
+    /** One connection, one verified model. Catalog entries are never selectable here. */
+    fun selectConnection(configId: String, reconnect: Boolean = false) {
+        if (isGenerating.value || loadingModelConfigIds.value.isNotEmpty()) return
+        val config = uiState.value.enabledProviders.find { it.id == configId } ?: return
         loadingModelConfigIds.update { it + configId }
+        activeError.value = null
+        failedConnectionId = null
         viewModelScope.launch {
             try {
-                refreshProviderModelsUseCase(configId).onFailure { error ->
-                    if (!silent) {
-                        activeError.value = error.asGeckoError(configId)
+                if (!reconnect && config.verifiedModelId != null && config.connectionStatus == ConnectionStatus.Success) {
+                    userPreferencesRepository.setDefaultSelection(configId, config.verifiedModelId)
+                } else {
+                    connectProviderUseCase(configId).onFailure {
+                        failedConnectionId = configId
+                        activeError.value = it.asGeckoError(configId)
                     }
                 }
             } finally {
@@ -357,11 +316,17 @@ class ChatViewModel @Inject constructor(
         activeError.value = null
     }
 
+    fun retryAfterError() {
+        val configId = failedConnectionId
+        if (configId != null) selectConnection(configId, reconnect = true) else regenerate()
+    }
+
     /**
      * Re-opens the explanation for a message that failed earlier. The dialog that first reported it
      * is long gone by the time someone scrolls back, so the transcript keeps enough to rebuild it.
      */
     fun showError(error: GeckoError) {
+        failedConnectionId = null
         activeError.value = error.withProviderContext()
     }
 
@@ -384,6 +349,7 @@ class ChatViewModel @Inject constructor(
 
     private fun runGeneration(configId: String, flowProvider: suspend () -> Flow<ChatEvent>) {
         if (isGenerating.value) return
+        failedConnectionId = null
         isGenerating.value = true
         generationJob = viewModelScope.launch {
             try {

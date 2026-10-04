@@ -85,10 +85,10 @@ fun GeckoError.copyForUser(): ErrorCopy {
 
         ErrorKind.ModelUnavailable -> ErrorCopy(
             title = "That model isn't available",
-            explanation = "$provider doesn't offer this model on your key any more. Pick a " +
-                "different one and carry on.",
+            explanation = "$provider doesn't offer this model on your key. Reconnect and Gecko will " +
+                "check for a working model automatically.",
             fix = ErrorFix.PickAnotherModel,
-            fixLabel = "Choose a model",
+            fixLabel = "Reconnect automatically",
             shortLabel = "Model unavailable",
         )
 
@@ -103,10 +103,10 @@ fun GeckoError.copyForUser(): ErrorCopy {
 
         ErrorKind.BadRequest -> ErrorCopy(
             title = "$provider rejected the request",
-            explanation = "Something about this request wasn't accepted. Trying a different model " +
-                "usually clears it.",
+            explanation = "The provider couldn't accept this request. Reconnect to check a working model. " +
+                "If it persists, try a text-only message.",
             fix = ErrorFix.PickAnotherModel,
-            fixLabel = "Choose a model",
+            fixLabel = "Reconnect automatically",
             shortLabel = "Request rejected",
         )
 
@@ -130,9 +130,9 @@ fun GeckoError.copyForUser(): ErrorCopy {
         ErrorKind.SafetyBlocked -> ErrorCopy(
             title = "The model wouldn't answer that",
             explanation = "$provider's safety filters blocked this reply. Rephrasing the question " +
-                "usually works, or you can try another model.",
-            fix = ErrorFix.PickAnotherModel,
-            fixLabel = "Choose a model",
+                "may help if your intent was misunderstood.",
+            fix = ErrorFix.None,
+            fixLabel = null,
             shortLabel = "Blocked",
         )
 
