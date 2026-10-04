@@ -1,5 +1,7 @@
 package com.gecko.feature.chat.component
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import android.Manifest
 import android.content.pm.PackageManager
 import android.speech.RecognitionListener
@@ -15,6 +17,12 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -22,6 +30,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -44,12 +53,10 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -57,6 +64,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.text.KeyboardActions
@@ -73,10 +81,24 @@ fun MessageComposer(
     onSend: (text: String, attachmentBase64: String?) -> Boolean,
     onStop: () -> Unit,
     modifier: Modifier = Modifier,
+    suggestedPrompt: String? = null,
+    onSuggestionConsumed: () -> Unit = {},
 ) {
     val context = LocalContext.current
+    // Leave room for the keyboard and action row, including on short screens with large text.
+    val maxInputHeight = (LocalConfiguration.current.screenHeightDp * 0.2f).coerceIn(56f, 144f).dp
     val scope = rememberCoroutineScope()
     var text by rememberSaveable { mutableStateOf("") }
+    val inputFocus = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    LaunchedEffect(suggestedPrompt) {
+        if (suggestedPrompt != null) {
+            text = suggestedPrompt
+            inputFocus.requestFocus()
+            keyboard?.show()
+            onSuggestionConsumed()
+        }
+    }
     var attachmentBase64 by remember { mutableStateOf<String?>(null) }
     var isEncodingAttachment by remember { mutableStateOf(false) }
     var isListening by remember { mutableStateOf(false) }
@@ -166,11 +188,13 @@ fun MessageComposer(
     }
 
     Surface(
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        shadowElevation = 0.dp,
         shape = RoundedCornerShape(28.dp),
         modifier = modifier.fillMaxWidth(),
     ) {
-        Column(modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) {
+        Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)) {
             AnimatedVisibility(
                 visible = attachmentBase64 != null,
                 enter = fadeIn(tween(GeckoMotion.DURATION_STANDARD)) + expandVertically(tween(GeckoMotion.DURATION_STANDARD, easing = GeckoMotion.EasingEmphasized)),
@@ -180,38 +204,11 @@ fun MessageComposer(
                     AttachmentPreviewChip(base64 = base64, onRemove = { attachmentBase64 = null })
                 }
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .padding(start = 2.dp)
-                        .size(48.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary, CircleShape)
-                        .clickable(enabled = !isEncodingAttachment) {
-                            pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                        },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (isEncodingAttachment) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Filled.Add,
-                            contentDescription = "Add attachment",
-                            tint = MaterialTheme.colorScheme.onPrimary,
-                            modifier = Modifier.size(20.dp),
-                        )
-                    }
-                }
                 TextField(
                     value = text,
                     onValueChange = { text = it },
-                    modifier = Modifier.weight(1f),
-                    placeholder = { Text("What's up…") },
+                    modifier = Modifier.fillMaxWidth().heightIn(max = maxInputHeight).focusRequester(inputFocus),
+                    placeholder = { Text("Message Gecko…") },
                     maxLines = 6,
                     keyboardOptions = KeyboardOptions(imeAction = if (sendOnEnter) ImeAction.Send else ImeAction.Default),
                     keyboardActions = KeyboardActions(onSend = { send() }),
@@ -223,6 +220,34 @@ fun MessageComposer(
                         unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
                     ),
                 )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .padding(start = 2.dp)
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceContainer, CircleShape)
+                        .clickable(enabled = !isEncodingAttachment) {
+                            pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (isEncodingAttachment) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Filled.Add,
+                            contentDescription = "Add attachment",
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                }
+                Spacer(Modifier.weight(1f))
                 if (isGenerating) {
                     ComposerActionButton(
                         icon = Icons.Filled.Stop,

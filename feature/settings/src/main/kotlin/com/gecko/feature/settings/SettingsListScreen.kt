@@ -1,7 +1,14 @@
 package com.gecko.feature.settings
 
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.unit.dp
+import androidx.compose.material.icons.outlined.Refresh
+import com.gecko.core.designsystem.component.GeckoPageIntro
+import com.gecko.feature.settings.component.SettingsPageFrame
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -18,7 +25,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -28,7 +34,6 @@ import com.gecko.feature.settings.component.SettingsContentPadding
 import com.gecko.feature.settings.component.SettingsRow
 import com.gecko.feature.settings.component.SettingsSectionHeader
 import com.gecko.feature.settings.component.SettingsTopBar
-import com.gecko.feature.settings.update.UpdateCheckFab
 import com.gecko.feature.settings.update.UpdateCheckState
 import com.gecko.feature.settings.update.UpdateResultDialog
 import com.gecko.feature.settings.update.UpdateViewModel
@@ -72,16 +77,13 @@ fun SettingsListScreen(
         modifier = modifier,
         topBar = { SettingsTopBar(title = "Settings", onBack = onBack) },
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        floatingActionButton = {
-            UpdateCheckFab(state = updateState, onClick = updateViewModel::checkForUpdate)
-        },
     ) { innerPadding ->
         val general = listOf(
             SettingsDestination("Appearance", "Theme and color", Icons.Outlined.Palette, onNavigateAppearance),
             SettingsDestination("Chat preferences", "Sending and streaming behavior", Icons.Outlined.Tune, onNavigateChatPreferences),
         )
         // One entry, not two. Keys and the model you chat with were split across "AI Providers"
-        // and "Model preferences" — two menu items for one decision, where only the second one
+        // and "Model preferences" â€” two menu items for one decision, where only the second one
         // actually changed anything.
         val ai = listOf(
             SettingsDestination("AI Providers", "API keys and the model you chat with", Icons.Outlined.SmartToy, onNavigateAiProviders),
@@ -91,13 +93,30 @@ fun SettingsListScreen(
             SettingsDestination("About", "Version and information", Icons.Outlined.Info, onNavigateAbout),
         )
 
-        LazyColumn(modifier = Modifier.fillMaxSize().padding(innerPadding), contentPadding = SettingsContentPadding) {
-            item { SettingsSectionHeader("General") }
-            items(general) { DestinationRow(it) }
-            item { SettingsSectionHeader("AI") }
-            items(ai) { DestinationRow(it) }
-            item { SettingsSectionHeader("Other") }
-            items(other) { DestinationRow(it) }
+        SettingsPageFrame(innerPadding) {
+            LazyColumn(modifier = Modifier.widthIn(max = 720.dp).fillMaxWidth(),
+                contentPadding = SettingsContentPadding, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                item { GeckoPageIntro("Make it yours", "A little fine-tuning for the way you think.") }
+                item { SettingsSectionHeader("Your AI") }
+                items(ai) { DestinationRow(it) }
+                item { SettingsSectionHeader("Your experience") }
+                items(general) { DestinationRow(it) }
+                item { SettingsSectionHeader("Your app") }
+                items(other) { DestinationRow(it) }
+                item {
+                    val busy = updateState is UpdateCheckState.Checking || updateState is UpdateCheckState.Downloading
+                    SettingsRow(
+                        title = when (updateState) {
+                            is UpdateCheckState.Downloading -> "Downloading update…"
+                            is UpdateCheckState.Checking -> "Checking for updates…"
+                            else -> "Check for updates"
+                        },
+                        subtitle = "Keep Gecko up to date",
+                        leading = { Icon(Icons.Outlined.Refresh, null) },
+                        onClick = if (busy) null else updateViewModel::checkForUpdate,
+                    )
+                }
+            }
         }
     }
 

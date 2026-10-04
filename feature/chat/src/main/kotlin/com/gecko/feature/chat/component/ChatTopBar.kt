@@ -8,6 +8,10 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -30,6 +34,9 @@ fun ChatTopBar(
     onOpenDrawer: () -> Unit,
     modifier: Modifier = Modifier,
     showMenuButton: Boolean = true,
+    newChatEnabled: Boolean = true,
+    onNewChat: () -> Unit = {},
+    showModelSelector: Boolean = true,
     modelSelector: @Composable () -> Unit = {},
 ) {
     Column(modifier = modifier) {
@@ -59,8 +66,11 @@ fun ChatTopBar(
                     )
                 }
             },
-            actions = { modelSelector() },
+            actions = { IconButton(onClick = onNewChat, enabled = newChatEnabled) {
+                Icon(Icons.Outlined.Edit, contentDescription = "New chat")
+            } },
             colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
         )
+        if (showModelSelector) Box(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp)) { modelSelector() }
     }
 }

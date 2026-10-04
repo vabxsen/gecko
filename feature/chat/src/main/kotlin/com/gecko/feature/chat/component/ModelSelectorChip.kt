@@ -1,12 +1,11 @@
 package com.gecko.feature.chat.component
 
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.ExpandMore
@@ -17,13 +16,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.gecko.core.designsystem.icon.providerLogoRes
+import com.gecko.core.designsystem.icon.ProviderLogo
 import com.gecko.core.model.provider.ProviderConfig
 
 /**
@@ -49,15 +47,16 @@ fun ModelSelectorChip(
 
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(percent = 50),
+        shape = MaterialTheme.shapes.medium,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         color = if (hasSelection) {
-            MaterialTheme.colorScheme.surfaceContainerHigh
+            MaterialTheme.colorScheme.surface
         } else {
             MaterialTheme.colorScheme.primaryContainer
         },
         modifier = modifier
             .padding(end = 4.dp)
-            .widthIn(max = 220.dp)
+            .widthIn(max = 360.dp).heightIn(min = 48.dp)
             .semantics {
                 contentDescription = if (hasSelection) {
                     "Model: $title from $subtitle. Tap to change."
@@ -67,17 +66,11 @@ fun ModelSelectorChip(
             },
     ) {
         Row(
-            modifier = Modifier.padding(start = 10.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (selectedProvider != null) {
-                Image(
-                    painter = painterResource(
-                        id = providerLogoRes(selectedProvider.providerId, selectedProvider.baseUrlOverride),
-                    ),
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                )
+                ProviderLogo(selectedProvider.providerId, selectedProvider.baseUrlOverride, size = 24.dp)
             } else {
                 Icon(
                     imageVector = Icons.Outlined.AutoAwesome,
@@ -86,9 +79,9 @@ fun ModelSelectorChip(
                     modifier = Modifier.size(16.dp),
                 )
             }
-            Column(modifier = Modifier.padding(start = 8.dp)) {
                 Text(
                     text = title,
+                    modifier = Modifier.weight(1f, fill = false).padding(horizontal = 10.dp),
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
@@ -99,19 +92,6 @@ fun ModelSelectorChip(
                         MaterialTheme.colorScheme.onPrimaryContainer
                     },
                 )
-                // The provider name is the disambiguator when two saved keys expose
-                // similarly-named models, but it's secondary — hidden until there's a selection
-                // so the empty state stays a single clear call to action.
-                if (hasSelection && subtitle != null) {
-                    Text(
-                        text = subtitle,
-                        style = MaterialTheme.typography.labelSmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
             Icon(
                 imageVector = Icons.Outlined.ExpandMore,
                 contentDescription = null,

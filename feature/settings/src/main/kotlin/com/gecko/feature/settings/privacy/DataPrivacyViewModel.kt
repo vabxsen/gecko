@@ -33,6 +33,11 @@ class DataPrivacyViewModel @Inject constructor(
         _exportedMarkdown.value = null
     }
 
+    fun reportExportResult(success: Boolean) {
+        _actionMessage.value = if (success) "Conversations exported"
+            else "Couldn't save the export. Please choose another location and try again."
+    }
+
     fun deleteAllConversations() {
         viewModelScope.launch {
             conversationRepository.deleteAllConversations()

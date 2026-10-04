@@ -1,5 +1,7 @@
 package com.gecko.feature.chat.component
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -7,6 +9,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
+import com.gecko.core.designsystem.icon.GeckoLogoMark
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -35,11 +38,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -74,9 +75,10 @@ fun MessageBubble(
     onRegenerate: () -> Unit,
     onShowError: (GeckoError) -> Unit,
     modifier: Modifier = Modifier,
+    actionsEnabled: Boolean = true,
 ) {
     when (message.role) {
-        MessageRole.USER -> UserMessage(message, isEditing, onBeginEdit, onSubmitEdit, onCancelEdit, modifier)
+        MessageRole.USER -> UserMessage(message, isEditing, onBeginEdit, onSubmitEdit, onCancelEdit, modifier, actionsEnabled)
         MessageRole.ASSISTANT ->
             AssistantMessage(message, visibleContent, isLastAssistantMessage, onRegenerate, onShowError, modifier)
         MessageRole.SYSTEM -> Unit
@@ -91,6 +93,7 @@ private fun UserMessage(
     onSubmitEdit: (String) -> Unit,
     onCancelEdit: () -> Unit,
     modifier: Modifier = Modifier,
+    actionsEnabled: Boolean = true,
 ) {
     Column(modifier = modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
         if (isEditing) {
@@ -98,8 +101,8 @@ private fun UserMessage(
             return@Column
         }
         Surface(
-            color = MaterialTheme.colorScheme.primaryContainer,
-            shape = RoundedCornerShape(20.dp, 20.dp, 6.dp, 20.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            shape = RoundedCornerShape(24.dp, 24.dp, 8.dp, 24.dp),
             modifier = Modifier.widthIn(max = 320.dp),
         ) {
             Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
@@ -112,7 +115,7 @@ private fun UserMessage(
             }
         }
         MessageActionsRow(alignEnd = true) {
-            ActionIcon(icon = Icons.Outlined.Edit, contentDescription = "Edit message", onClick = onBeginEdit)
+            ActionIcon(icon = Icons.Outlined.Edit, contentDescription = "Edit message", onClick = onBeginEdit, enabled = actionsEnabled)
             CopyActionIcon(text = message.content)
         }
     }
@@ -152,6 +155,13 @@ private fun AssistantMessage(
     val stillTyping = message.status == MessageStatus.STREAMING || visibleText.length < message.content.length
 
     Column(modifier = modifier.fillMaxWidth()) {
+        Row(Modifier.padding(bottom = 12.dp), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.primary) {
+                Icon(GeckoLogoMark, null, Modifier.size(28.dp), tint = MaterialTheme.colorScheme.onPrimary)
+            }
+            Text("Gecko", style = MaterialTheme.typography.titleSmall)
+        }
         when {
             visibleText.isEmpty() && message.generatedImageBase64 == null && stillTyping -> {
                 ThinkingIndicator()
@@ -256,8 +266,8 @@ private fun MessageActionsRow(alignEnd: Boolean, content: @Composable RowScope.(
 }
 
 @Composable
-private fun ActionIcon(icon: ImageVector, contentDescription: String, onClick: () -> Unit) {
-    IconButton(onClick = onClick) {
+private fun ActionIcon(icon: ImageVector, contentDescription: String, onClick: () -> Unit, enabled: Boolean = true) {
+    IconButton(onClick = onClick, enabled = enabled) {
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,

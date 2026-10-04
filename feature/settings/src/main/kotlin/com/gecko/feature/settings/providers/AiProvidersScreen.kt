@@ -1,12 +1,21 @@
 package com.gecko.feature.settings.providers
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material3.Button
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import com.gecko.core.designsystem.component.GeckoPageIntro
+import com.gecko.feature.settings.component.SettingsPageFrame
+import com.gecko.feature.settings.component.SettingsPanel
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -16,15 +25,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -56,43 +62,32 @@ fun AiProvidersScreen(
     Scaffold(
         modifier = modifier,
         topBar = { SettingsTopBar(title = "AI Providers", onBack = onBack) },
-        floatingActionButton = {
-            if (canAddMore) {
-                ExtendedFloatingActionButton(
-                    onClick = onAddProvider,
-                    elevation = FloatingActionButtonDefaults.elevation(
-                        defaultElevation = 0.dp,
-                        pressedElevation = 0.dp,
-                        focusedElevation = 0.dp,
-                        hoveredElevation = 0.dp,
-                    ),
-                    icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                    text = { Text("Add API key") },
-                )
-            }
-        },
-    ) { innerPadding ->
-        if (rows.isEmpty()) {
-            Text(
-                text = "No API keys yet. Add one to start chatting — bring your own key from OpenAI, Anthropic, Google, or OpenRouter.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(innerPadding).padding(20.dp),
-            )
-            return@Scaffold
-        }
 
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(innerPadding),
-            contentPadding = SettingsContentPadding,
-        ) {
-            items(rows, key = { it.config.id }) { row ->
-                ProviderRow(
-                    row = row,
-                    onClick = { onOpenProvider(row.config.id) },
-                    onToggleEnabled = { enabled -> viewModel.setEnabled(row.config.id, enabled) },
-                    modifier = Modifier.animateItem(),
-                )
+    ) { innerPadding ->
+        SettingsPageFrame(innerPadding) {
+            LazyColumn(Modifier.widthIn(max = 720.dp).fillMaxWidth(), contentPadding = SettingsContentPadding,
+                verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                item { GeckoPageIntro("Your AI, connected", "One place for your keys and the models you use.") }
+                if (rows.isEmpty()) {
+                    item { SettingsPanel {
+                        Text("Start with one key", style = MaterialTheme.typography.titleLarge)
+                        Text("Paste a key from your AI provider. Gecko will find a working model for you.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } }
+                }
+                items(rows, key = { it.config.id }) { row ->
+                    ProviderRow(row, { onOpenProvider(row.config.id) },
+                        { enabled -> viewModel.setEnabled(row.config.id, enabled) }, Modifier.animateItem())
+                }
+                if (canAddMore) {
+                    item { Button(onClick = onAddProvider, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Filled.Add, null, Modifier.padding(end = 8.dp))
+                        Text("Add API key", Modifier.padding(vertical = 8.dp))
+                    } }
+                }
+                item { Text("Keys are encrypted and stored on this device.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)) }
             }
         }
     }
@@ -110,7 +105,7 @@ private fun ProviderRow(
         title = config.label.ifBlank { config.providerId.displayName },
         // The model leads: it's what someone opening this screen came to check, and it used to be
         // on a different screen entirely.
-        subtitle = listOfNotNull(row.modelLabel, statusLabel(config)).joinToString(" · "),
+        subtitle = listOfNotNull(if (row.isInUse) "In use" else null, row.modelLabel, if (config.enabled) statusLabel(config) else "Disabled").joinToString(" · "),
         onClick = onClick,
         modifier = modifier,
         leading = {
@@ -124,14 +119,8 @@ private fun ProviderRow(
         },
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (row.isInUse) {
-                    Text(
-                        text = "In use",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
-                Switch(checked = config.enabled, onCheckedChange = onToggleEnabled)
+                Switch(checked = config.enabled, onCheckedChange = onToggleEnabled,
+                    modifier = Modifier.semantics { contentDescription = "Enable ${config.label}" })
                 Icon(
                     Icons.AutoMirrored.Filled.KeyboardArrowRight,
                     contentDescription = null,

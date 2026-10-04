@@ -1,8 +1,9 @@
 package com.gecko.feature.settings.privacy
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.DeleteForever
 import androidx.compose.material.icons.outlined.DeleteSweep
@@ -17,10 +18,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -28,7 +28,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.gecko.feature.settings.component.SettingsRow
 import com.gecko.feature.settings.component.SettingsSectionHeader
 import com.gecko.feature.settings.component.SettingsTopBar
+import com.gecko.core.designsystem.component.GeckoPageIntro
+import com.gecko.feature.settings.component.SettingsPage
 import java.io.OutputStreamWriter
+import java.io.IOException
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun DataPrivacyScreen(
@@ -40,6 +47,7 @@ fun DataPrivacyScreen(
     val exportedMarkdown by viewModel.exportedMarkdown.collectAsStateWithLifecycle()
     val actionMessage by viewModel.actionMessage.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
     var showDeleteConversationsDialog by remember { mutableStateOf(false) }
     var showClearAllDialog by remember { mutableStateOf(false) }
@@ -47,9 +55,18 @@ fun DataPrivacyScreen(
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/markdown")) { uri ->
         val markdown = exportedMarkdown
         if (uri != null && markdown != null) {
-            runCatching {
-                context.contentResolver.openOutputStream(uri)?.use { stream ->
-                    OutputStreamWriter(stream).use { it.write(markdown) }
+            scope.launch {
+                try {
+                    withContext(Dispatchers.IO) {
+                        val stream = context.contentResolver.openOutputStream(uri)
+                            ?: throw IOException("The selected document could not be opened")
+                        OutputStreamWriter(stream, Charsets.UTF_8).use { it.write(markdown) }
+                    }
+                    viewModel.reportExportResult(true)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    viewModel.reportExportResult(false)
                 }
             }
         }
@@ -74,7 +91,8 @@ fun DataPrivacyScreen(
         topBar = { SettingsTopBar(title = "Data & Privacy", onBack = onBack) },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { innerPadding ->
-        androidx.compose.foundation.layout.Column(modifier = Modifier.padding(innerPadding)) {
+        SettingsPage(innerPadding) {
+            GeckoPageIntro("Your data, your call", "Manage what you keep on this device.")
             SettingsSectionHeader("Export")
             SettingsRow(
                 title = "Export conversations",
@@ -83,7 +101,7 @@ fun DataPrivacyScreen(
                 onClick = viewModel::prepareExport,
             )
 
-            SettingsSectionHeader("Danger zone")
+            SettingsSectionHeader("Remove data")
             SettingsRow(
                 title = "Delete all conversations",
                 subtitle = "Keeps your provider settings and API keys",

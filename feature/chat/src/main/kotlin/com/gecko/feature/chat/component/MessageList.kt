@@ -1,5 +1,10 @@
 package com.gecko.feature.chat.component
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -10,7 +15,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -33,6 +37,7 @@ fun MessageList(
     onRegenerate: () -> Unit,
     onShowError: (GeckoError) -> Unit,
     modifier: Modifier = Modifier,
+    isGenerating: Boolean = false,
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -68,12 +73,12 @@ fun MessageList(
         }
     }
 
-    Box(modifier = modifier.fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyColumn(
             state = listState,
             reverseLayout = true,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            modifier = Modifier.widthIn(max = 800.dp).fillMaxWidth().fillMaxHeight(),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(18.dp),
         ) {
             // Emitted first, so under `reverseLayout` it lands at the very bottom: breathing room
@@ -93,6 +98,7 @@ fun MessageList(
                     onCancelEdit = onCancelEdit,
                     onRegenerate = onRegenerate,
                     onShowError = onShowError,
+                    actionsEnabled = !isGenerating,
                     // Deliberately no animateItem(): it animates every size change, so a bubble
                     // growing a word at a time spends the whole reply chasing its own last frame.
                     // Messages are only appended here, never reordered, so it earns nothing.

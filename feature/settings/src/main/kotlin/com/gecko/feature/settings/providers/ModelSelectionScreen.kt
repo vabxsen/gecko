@@ -1,5 +1,11 @@
 package com.gecko.feature.settings.providers
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.fillMaxWidth
+import com.gecko.core.designsystem.component.GeckoPageIntro
+import com.gecko.feature.settings.component.SettingsPageFrame
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,10 +18,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -91,20 +95,23 @@ fun ModelSelectionScreen(
             return@Scaffold
         }
 
-        LazyColumn(modifier = Modifier.fillMaxSize().padding(innerPadding), contentPadding = SettingsContentPadding) {
-            modelPickerItems(
-                models = uiState.models,
-                providerId = providerId,
-                baseUrlOverride = uiState.baseUrlOverride,
-                selectedModelId = uiState.selectedModelId,
-                showAll = showAllModels,
-                onToggleShowAll = { showAllModels = !showAllModels },
-                onSelectModel = { modelId ->
-                    viewModel.selectModel(modelId)
-                    onBack()
-                },
-                emptyContent = {},
-            )
+        SettingsPageFrame(innerPadding) {
+            LazyColumn(modifier = Modifier.widthIn(max = 720.dp).fillMaxWidth(), contentPadding = SettingsContentPadding,
+                verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                item { GeckoPageIntro("A mind for every task", "Choose the model for your next message.") }
+                modelPickerItems(
+                    models = uiState.models,
+                    providerId = providerId,
+                    baseUrlOverride = uiState.baseUrlOverride,
+                    selectedModelId = uiState.selectedModelId,
+                    showAll = showAllModels,
+                    onToggleShowAll = { showAllModels = !showAllModels },
+                    onSelectModel = { modelId ->
+                        viewModel.selectModel(modelId, onSelected = onBack)
+                    },
+                    emptyContent = {},
+                )
+            }
         }
     }
 }

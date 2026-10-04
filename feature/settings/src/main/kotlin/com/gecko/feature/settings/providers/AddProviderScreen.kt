@@ -1,6 +1,12 @@
 package com.gecko.feature.settings.providers
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import android.content.ClipboardManager
+import com.gecko.core.designsystem.component.GeckoBrandTile
+import com.gecko.core.designsystem.component.GeckoPageIntro
+import com.gecko.feature.settings.component.SettingsPanel
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,7 +21,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Visibility
@@ -33,11 +38,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -78,94 +81,90 @@ internal fun AddProviderContent(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val keyboard = LocalSoftwareKeyboardController.current
     var keyVisible by remember { mutableStateOf(false) }
     var chooseProvider by remember { mutableStateOf(false) }
     var advanced by rememberSaveable { mutableStateOf(false) }
     Scaffold(modifier = modifier, topBar = { SettingsTopBar("Connect your AI", onBack) }) { padding ->
         Box(Modifier.padding(padding).imePadding().fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
             Column(
-                Modifier.widthIn(max = 560.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp),
+                Modifier.widthIn(max = 560.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = MaterialTheme.shapes.large) {
-                    Icon(Icons.Outlined.AutoAwesome, null, Modifier.padding(16.dp).size(28.dp),
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                }
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Your key. Ready to chat.", style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.SemiBold)
-                    Text("Paste your API key. Gecko will find a working model and get you straight into chat.",
-                        style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                OutlinedTextField(
-                    value = state.apiKey, onValueChange = onKeyChange,
-                    label = { Text("API key") }, placeholder = { Text("Paste your key here") },
-                    modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !state.isSaving,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                    trailingIcon = {
-                        IconButton(onClick = { keyVisible = !keyVisible }) {
-                            Icon(if (keyVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
-                                if (keyVisible) "Hide key" else "Show key")
-                        }
-                    },
-                )
-                TextButton(onClick = {
-                    val clip = context.getSystemService(ClipboardManager::class.java).primaryClip
-                    if (clip != null && clip.itemCount > 0) {
-                        clip.getItemAt(0).text?.toString()?.let(onKeyChange)
-                    }
-                }, enabled = !state.isSaving) {
-                    Text("Paste from clipboard")
-                }
-                if (state.apiKey.isNotBlank() || state.selectedProviderId != null) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            state.selectedProviderId?.let {
-                                ProviderLogo(providerId = it, baseUrlOverride = state.baseUrlOverride.ifBlank { null }, size = 28.dp)
+                GeckoBrandTile(size = 64.dp)
+                GeckoPageIntro("One key. You're in.", "Paste your API key. Gecko will find a working model and get you straight into chat.")
+                SettingsPanel {
+                    OutlinedTextField(
+                        value = state.apiKey, onValueChange = onKeyChange,
+                        label = { Text("API key") }, placeholder = { Text("Paste your key here") },
+                        modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !state.isSaving,
+                        shape = MaterialTheme.shapes.medium,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { keyVisible = !keyVisible }) {
+                                Icon(if (keyVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                                    if (keyVisible) "Hide key" else "Show key")
                             }
-                            Text(state.providerLabel.ifBlank { "Which provider is this key from?" },
-                                modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-                            Box {
-                                TextButton(onClick = { chooseProvider = true }, enabled = !state.isSaving) {
-                                    Text(if (state.selectedProviderId == null) "Choose" else "Change")
-                                    Icon(Icons.Outlined.ExpandMore, null, Modifier.size(18.dp))
+                        },
+                    )
+                    TextButton(onClick = {
+                        val clip = context.getSystemService(ClipboardManager::class.java).primaryClip
+                        if (clip != null && clip.itemCount > 0) {
+                            clip.getItemAt(0).text?.toString()?.let(onKeyChange)
+                        }
+                    }, enabled = !state.isSaving) {
+                        Text("Paste from clipboard")
+                    }
+                    if (state.apiKey.isNotBlank() || state.selectedProviderId != null) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                state.selectedProviderId?.let {
+                                    ProviderLogo(providerId = it, baseUrlOverride = state.baseUrlOverride.ifBlank { null }, size = 28.dp)
                                 }
-                                DropdownMenu(expanded = chooseProvider, onDismissRequest = { chooseProvider = false }) {
-                                    ADD_PROVIDER_OPTIONS.forEach { option ->
-                                        DropdownMenuItem(text = { Text(option.label) }, onClick = {
-                                            onSelectProvider(option)
-                                            chooseProvider = false
-                                        })
+                                Text(state.providerLabel.ifBlank { "Which provider is this key from?" },
+                                    modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                                Box {
+                                    TextButton(onClick = { chooseProvider = true }, enabled = !state.isSaving) {
+                                        Text(if (state.selectedProviderId == null) "Choose" else "Change")
+                                        Icon(Icons.Outlined.ExpandMore, null, Modifier.size(18.dp))
+                                    }
+                                    DropdownMenu(expanded = chooseProvider, onDismissRequest = { chooseProvider = false }) {
+                                        ADD_PROVIDER_OPTIONS.forEach { option ->
+                                            DropdownMenuItem(text = { Text(option.label) }, onClick = {
+                                                onSelectProvider(option)
+                                                chooseProvider = false
+                                            })
+                                        }
                                     }
                                 }
                             }
-                        }
-                        if (state.selectedProviderId == null) {
-                            Text("Some keys share the same format. Choose the service that issued yours.",
-                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                }
-                state.error?.let { error ->
-                    val copy = error.copyForUser()
-                    Surface(color = MaterialTheme.colorScheme.errorContainer, shape = MaterialTheme.shapes.medium) {
-                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text(copy.title, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onErrorContainer)
-                            Text(if (error.kind == ErrorKind.ModelUnavailable)
-                                "We couldn't find an available chat model for this key. Check model access with your provider, then try again."
-                                else copy.explanation, style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onErrorContainer)
+                            if (state.selectedProviderId == null) {
+                                Text("Some keys share the same format. Choose the service that issued yours.",
+                                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
                     }
+                    state.error?.let { error ->
+                        val copy = error.copyForUser()
+                        Surface(color = MaterialTheme.colorScheme.errorContainer, shape = MaterialTheme.shapes.medium) {
+                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text(copy.title, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onErrorContainer)
+                                Text(if (error.kind == ErrorKind.ModelUnavailable)
+                                    "We couldn't find an available chat model for this key. Check model access with your provider, then try again."
+                                    else copy.explanation, style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onErrorContainer)
+                            }
+                        }
+                    }
+                    Button(onClick = { keyboard?.hide(); onConnect() }, enabled = state.canSave, modifier = Modifier.fillMaxWidth()) {
+                        if (state.isSaving) CircularProgressIndicator(Modifier.padding(end = 10.dp).size(18.dp), strokeWidth = 2.dp)
+                        Text(if (state.isSaving) "Connecting…" else "Connect & start chatting", Modifier.padding(vertical = 8.dp))
+                    }
+                    if (state.isSaving) Text("Finding a model that works with your key…",
+                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Button(onClick = onConnect, enabled = state.canSave, modifier = Modifier.fillMaxWidth()) {
-                    if (state.isSaving) CircularProgressIndicator(Modifier.padding(end = 10.dp).size(18.dp), strokeWidth = 2.dp)
-                    Text(if (state.isSaving) "Connecting…" else "Connect & start chatting", Modifier.padding(vertical = 8.dp))
-                }
-                if (state.isSaving) Text("Finding a model that works with your key…",
-                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Outlined.Lock, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("Your key is encrypted and stored on this device.", style = MaterialTheme.typography.bodySmall,

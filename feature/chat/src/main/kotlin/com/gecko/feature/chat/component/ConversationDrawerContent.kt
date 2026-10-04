@@ -1,5 +1,7 @@
 package com.gecko.feature.chat.component
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
@@ -19,7 +21,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.safeDrawing
+import com.gecko.core.designsystem.component.GeckoBrandTile
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -52,13 +55,12 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.font.FontWeight
@@ -82,11 +84,14 @@ fun ConversationDrawerContent(
     onTogglePinned: (String, Boolean) -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
+    navigationEnabled: Boolean = true,
 ) {
+    val keyboard = LocalSoftwareKeyboardController.current
     var searchActive by rememberSaveable { mutableStateOf(false) }
     val searchFocusRequester = remember { FocusRequester() }
 
-    ModalDrawerSheet(modifier = modifier, windowInsets = WindowInsets.statusBars) {
+    ModalDrawerSheet(modifier = modifier, windowInsets = WindowInsets.safeDrawing,
+        drawerContainerColor = MaterialTheme.colorScheme.background) {
         Column(modifier = Modifier.fillMaxSize()) {
             Column(modifier = Modifier.padding(16.dp)) {
                 AnimatedContent(
@@ -106,7 +111,7 @@ fun ConversationDrawerContent(
                                 singleLine = true,
                                 leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
                                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                                keyboardActions = KeyboardActions(onSearch = {}),
+                                keyboardActions = KeyboardActions(onSearch = { keyboard?.hide() }),
                                 colors = TextFieldDefaults.colors(
                                     focusedContainerColor = androidx.compose.ui.graphics.Color.Transparent,
                                     unfocusedContainerColor = androidx.compose.ui.graphics.Color.Transparent,
@@ -124,6 +129,8 @@ fun ConversationDrawerContent(
                         LaunchedEffect(Unit) { searchFocusRequester.requestFocus() }
                     } else {
                         Row(verticalAlignment = Alignment.CenterVertically) {
+                            GeckoBrandTile(size = 40.dp)
+                            Spacer(Modifier.width(12.dp))
                             Text(
                                 text = "Gecko",
                                 style = MaterialTheme.typography.headlineMedium,
@@ -152,23 +159,25 @@ fun ConversationDrawerContent(
                 Spacer(Modifier.height(16.dp))
                 Surface(
                     onClick = onNewChat,
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    shape = RoundedCornerShape(50),
+                    enabled = navigationEnabled,
+                    color = MaterialTheme.colorScheme.primary,
+                    shape = MaterialTheme.shapes.large,
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Icon(
                             imageVector = Icons.Outlined.AddCircleOutline,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            tint = MaterialTheme.colorScheme.onPrimary,
                         )
                         Spacer(Modifier.width(10.dp))
                         Text(
                             text = "New chat",
                             style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            color = MaterialTheme.colorScheme.onPrimary,
                         )
                     }
                 }
@@ -194,11 +203,14 @@ fun ConversationDrawerContent(
                     )
                 }
             } else {
+                Text("Conversations", style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
                 LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(vertical = 8.dp)) {
                     items(conversations, key = { it.id }) { conversation ->
                         ConversationRow(
                             conversation = conversation,
                             selected = conversation.id == currentConversationId,
+                            enabled = navigationEnabled,
                             onClick = { onSelectConversation(conversation.id) },
                             onRename = { newTitle -> onRenameConversation(conversation.id, newTitle) },
                             onDelete = { onDeleteConversation(conversation.id) },
@@ -209,9 +221,13 @@ fun ConversationDrawerContent(
                 }
             }
 
-            Row(modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 16.dp)) {
-                IconButton(onClick = onOpenSettings) {
-                    Icon(Icons.Outlined.Settings, contentDescription = "Settings")
+            Surface(onClick = onOpenSettings, shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.surfaceContainer,
+                modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Icon(Icons.Outlined.Settings, contentDescription = null)
+                    Text("Settings", style = MaterialTheme.typography.titleMedium)
                 }
             }
         }
@@ -222,6 +238,7 @@ fun ConversationDrawerContent(
 private fun ConversationRow(
     conversation: Conversation,
     selected: Boolean,
+    enabled: Boolean,
     onClick: () -> Unit,
     onRename: (String) -> Unit,
     onDelete: () -> Unit,
@@ -232,13 +249,14 @@ private fun ConversationRow(
     var renaming by remember { mutableStateOf(false) }
     var renameText by rememberSaveable(conversation.id) { mutableStateOf(conversation.title) }
     val containerColor by animateColorAsState(
-        targetValue = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface,
+        targetValue = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.background,
         animationSpec = tween(GeckoMotion.DURATION_STANDARD, easing = GeckoMotion.EasingStandard),
         label = "conversationRowColor",
     )
 
     Surface(
         onClick = onClick,
+        enabled = enabled,
         color = containerColor,
         shape = RoundedCornerShape(12.dp),
         modifier = modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
@@ -252,9 +270,9 @@ private fun ConversationRow(
                     singleLine = true,
                 )
                 TextButton(onClick = {
-                    onRename(renameText)
+                    onRename(renameText.trim())
                     renaming = false
-                }) { Text("Save") }
+                }, enabled = renameText.isNotBlank()) { Text("Save") }
             }
             return@Surface
         }

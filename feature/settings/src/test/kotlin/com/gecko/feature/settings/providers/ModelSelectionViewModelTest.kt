@@ -67,6 +67,30 @@ class ModelSelectionViewModelTest {
     }
 
     @Test
+    fun navigationWaitsUntilSelectionIsPersisted() = runTest {
+        val id = configRepository.addProvider(ProviderId.GOOGLE, "Gemini").getOrThrow()
+        configRepository.saveModels(id, listOf(model("gemini-test")))
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val slowPreferences = object : com.gecko.domain.repository.UserPreferencesRepository by preferencesRepository {
+            override suspend fun setDefaultSelection(configId: String?, modelId: String?) {
+                gate.await()
+                preferencesRepository.setDefaultSelection(configId, modelId)
+            }
+        }
+        val vm = ModelSelectionViewModel(SavedStateHandle(mapOf("configId" to id)),
+            configRepository, slowPreferences,
+            RefreshProviderModelsUseCase(FakeChatCompletionRepository(), configRepository))
+        var navigated = false
+        vm.selectModel("gemini-test") { navigated = true }
+        advanceUntilIdle()
+        assertEquals(false, navigated)
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertEquals("gemini-test", preferencesRepository.userPreferences.first().defaultModelId)
+        assertEquals(true, navigated)
+    }
+
+    @Test
     fun anotherKeysListDoesNotShowAModelBorrowedFromTheOneInUse() = runTest {
         val inUse = configRepository.addProvider(ProviderId.GOOGLE, "Gemini").getOrThrow()
         val other = configRepository.addProvider(ProviderId.ANTHROPIC, "Claude").getOrThrow()

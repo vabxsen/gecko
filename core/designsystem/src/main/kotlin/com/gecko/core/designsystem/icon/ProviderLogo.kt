@@ -10,6 +10,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -55,6 +56,12 @@ fun ProviderLogo(providerId: ProviderId, baseUrlOverride: String?, modifier: Mod
         Image(
             painter = painterResource(id = providerLogoRes(providerId, baseUrlOverride)),
             contentDescription = null,
+            colorFilter = when (ProviderFlavor.of(providerId, baseUrlOverride)) {
+                ProviderFlavor.OpenAi, ProviderFlavor.CustomOpenAiCompatible,
+                ProviderFlavor.Anthropic, ProviderFlavor.Kimi, ProviderFlavor.OpenRouter ->
+                    ColorFilter.tint(MaterialTheme.colorScheme.onSurface)
+                else -> null
+            },
             modifier = Modifier.size(size * 0.58f),
         )
     }

@@ -1,5 +1,10 @@
 package com.gecko.feature.settings.about
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import com.gecko.core.designsystem.component.GeckoBrandTile
+import com.gecko.feature.settings.component.SettingsPage
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -29,14 +34,16 @@ fun AboutScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
         modifier = modifier,
         topBar = { SettingsTopBar(title = "About", onBack = onBack) },
     ) { innerPadding ->
-        Column(modifier = Modifier.padding(innerPadding)) {
+        SettingsPage(innerPadding) {
             Column(
                 modifier = Modifier.fillMaxWidth().padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                GeckoBrandTile(size = 88.dp)
                 Text(
                     text = "Gecko",
-                    style = MaterialTheme.typography.headlineMedium,
+                    style = MaterialTheme.typography.displayLarge,
                     fontWeight = FontWeight.Medium,
                     letterSpacing = (-0.5).sp,
                 )
@@ -51,11 +58,11 @@ fun AboutScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             SettingsSectionHeader("About")
             SettingsRow(
                 title = "Bring your own keys",
-                subtitle = "Gecko talks directly to OpenAI, Anthropic, Google, and OpenRouter using API keys you provide. There is no Gecko backend, and your conversations never pass through a third-party server.",
+                subtitle = "Connect your own AI provider. Gecko sends your messages directly to the service you choose, without a Gecko backend.",
             )
             SettingsRow(
-                title = "Your data stays on this device",
-                subtitle = "Conversations and settings are stored locally in an encrypted, on-device database. API keys are encrypted with a hardware-backed Android Keystore key.",
+                title = "Stored on your device",
+                subtitle = "Your conversation history and preferences are stored locally. API keys are encrypted using Android Keystore. Messages you send are processed by your chosen AI provider.",
             )
         }
     }

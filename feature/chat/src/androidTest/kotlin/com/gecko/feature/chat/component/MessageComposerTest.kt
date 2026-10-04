@@ -1,13 +1,17 @@
 package com.gecko.feature.chat.component
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.layout.Column
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.runtime.mutableStateOf
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -15,6 +19,24 @@ import org.junit.Test
 class MessageComposerTest {
     @get:Rule
     val compose = createComposeRule()
+
+    @Test
+    fun starterFillsTheDraftWithoutSending() {
+        val suggestion = mutableStateOf<String?>(null)
+        var sends = 0
+        compose.setContent {
+            MaterialTheme {
+                Column {
+                    EmptyChatState(modifier = Modifier.weight(1f), onPromptSelected = { suggestion.value = it })
+                MessageComposer(false, true, onSend = { _, _ -> sends++; true }, onStop = {},
+                    suggestedPrompt = suggestion.value, onSuggestionConsumed = { suggestion.value = null })
+                }
+            }
+        }
+        compose.onNodeWithText("Shape an idea").performClick()
+        compose.onNode(hasSetTextAction()).assertTextContains("Help me brainstorm. Ask me about the idea I want to explore.")
+        compose.runOnIdle { assertEquals(0, sends) }
+    }
 
     @Test
     fun rejectedSendKeepsTheDraft() {

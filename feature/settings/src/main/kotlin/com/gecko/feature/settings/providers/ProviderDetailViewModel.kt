@@ -149,6 +149,7 @@ class ProviderDetailViewModel @Inject constructor(
             secureKeyRepository.clearApiKey(id)
             providerConfigRepository.setConnectionStatus(id, ConnectionStatus.Untested)
             apiKeyValue.value = null
+            saveKeyErrorMessage.value = null
         }
     }
 
@@ -160,6 +161,7 @@ class ProviderDetailViewModel @Inject constructor(
     fun refreshModels() {
         if (isLoadingModels.value) return
         isLoadingModels.value = true
+        saveKeyErrorMessage.value = null
         viewModelScope.launch {
             try {
                 refreshProviderModelsUseCase(id).onFailure { error ->
