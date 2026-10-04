@@ -12,6 +12,7 @@ package com.gecko.core.model.error
  */
 enum class ErrorKind(val wireName: String) {
     InvalidApiKey("INVALID_API_KEY"),
+    PermissionDenied("PERMISSION_DENIED"),
     NoApiKey("NO_API_KEY"),
 
     /** The key is stored but this device can no longer decrypt it — not the same as having none. */

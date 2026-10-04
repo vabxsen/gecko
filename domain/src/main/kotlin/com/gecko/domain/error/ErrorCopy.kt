@@ -39,6 +39,15 @@ fun GeckoError.copyForUser(): ErrorCopy {
             shortLabel = "Key rejected",
         )
 
+        ErrorKind.PermissionDenied -> ErrorCopy(
+            title = "Access wasn't granted",
+            explanation = "$provider denied access to this resource. Check the key's permissions, " +
+                "model access, and regional availability in your provider account.",
+            fix = ErrorFix.OpenProviderKey,
+            fixLabel = "Open key",
+            shortLabel = "Access denied",
+        )
+
         ErrorKind.NoApiKey -> ErrorCopy(
             title = "No API key for $provider",
             explanation = "Add a key for $provider before chatting with it.",

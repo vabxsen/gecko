@@ -17,23 +17,25 @@ class ProviderFactory(private val httpClient: OkHttpClient) {
     fun create(providerId: ProviderId, apiKey: String, baseUrlOverride: String? = null): AiProvider = when (providerId) {
         ProviderId.OPENAI -> OpenAiProvider(
             apiKey = apiKey,
-            baseUrl = baseUrlOverride ?: OpenAiProvider.DEFAULT_BASE_URL,
+            baseUrl = baseUrlOverride.normalized() ?: OpenAiProvider.DEFAULT_BASE_URL,
             httpClient = httpClient,
         )
         ProviderId.ANTHROPIC -> AnthropicProvider(
             apiKey = apiKey,
-            baseUrl = baseUrlOverride ?: AnthropicProvider.DEFAULT_BASE_URL,
+            baseUrl = baseUrlOverride.normalized() ?: AnthropicProvider.DEFAULT_BASE_URL,
             httpClient = httpClient,
         )
         ProviderId.GOOGLE -> GoogleGeminiProvider(
             apiKey = apiKey,
-            baseUrl = baseUrlOverride ?: GoogleGeminiProvider.DEFAULT_BASE_URL,
+            baseUrl = baseUrlOverride.normalized() ?: GoogleGeminiProvider.DEFAULT_BASE_URL,
             httpClient = httpClient,
         )
         ProviderId.OPENROUTER -> OpenRouterProvider(
             apiKey = apiKey,
-            baseUrl = baseUrlOverride ?: OpenRouterProvider.DEFAULT_BASE_URL,
+            baseUrl = baseUrlOverride.normalized() ?: OpenRouterProvider.DEFAULT_BASE_URL,
             httpClient = httpClient,
         )
     }
+
+    private fun String?.normalized(): String? = this?.trim()?.trimEnd('/')?.takeIf { it.isNotEmpty() }
 }

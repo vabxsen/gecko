@@ -3,6 +3,7 @@ package com.gecko.core.data.repository
 import app.cash.turbine.test
 import com.gecko.core.model.chat.ChatEvent
 import com.gecko.core.model.error.ErrorKind
+import com.gecko.core.model.error.GeckoException
 import com.gecko.core.model.provider.ProviderId
 import com.gecko.core.provider.api.ProviderFactory
 import com.gecko.core.testing.fake.FakeProviderConfigRepository
@@ -20,6 +21,61 @@ import org.junit.Test
 import java.util.concurrent.TimeUnit
 
 class ChatCompletionRepositoryImplTest {
+
+    private suspend fun configuredKey(): String {
+        val id = providerConfigRepository.addProvider(ProviderId.OPENAI, "Test provider").getOrThrow()
+        secureKeyRepository.saveApiKey(id, "test-key")
+        providerConfigRepository.setBaseUrlOverride(id, server.url("/v1/").toString())
+        return id
+    }
+
+    @Test
+    fun connectionProbeReportsQuotaFailureInsteadOfConnected() = runTest {
+        val id = configuredKey()
+        server.enqueue(MockResponse().setBody("""{"data":[{"id":"gpt-4o"}]}"""))
+        server.enqueue(MockResponse().setResponseCode(402).setBody("""{"error":{"message":"Insufficient credits"}}"""))
+
+        val failure = repository.testConnection(id).exceptionOrNull() as GeckoException
+
+        assertEquals(ErrorKind.QuotaExhausted, failure.error.kind)
+        assertEquals(id, failure.error.configId)
+        assertEquals("/v1/models", server.takeRequest().path)
+        assertEquals("/v1/chat/completions", server.takeRequest().path)
+    }
+
+    @Test
+    fun publicCatalogCannotMakeAnInvalidKeyPassValidation() = runTest {
+        val id = configuredKey()
+        server.enqueue(MockResponse().setBody("""{"data":[{"id":"gpt-4o"}]}"""))
+        server.enqueue(MockResponse().setResponseCode(401).setBody("""{"error":{"message":"Invalid key"}}"""))
+
+        val failure = repository.testConnection(id).exceptionOrNull() as GeckoException
+
+        assertEquals(ErrorKind.InvalidApiKey, failure.error.kind)
+        assertEquals(2, server.requestCount)
+    }
+
+    @Test
+    fun missingChatEndpointDoesNotPassValidation() = runTest {
+        val id = configuredKey()
+        server.enqueue(MockResponse().setBody("""{"data":[{"id":"gpt-4o"}]}"""))
+        server.enqueue(MockResponse().setResponseCode(404))
+
+        val failure = repository.testConnection(id).exceptionOrNull() as GeckoException
+
+        assertEquals(ErrorKind.ModelUnavailable, failure.error.kind)
+    }
+
+    @Test
+    fun emptyCatalogDoesNotPassValidation() = runTest {
+        val id = configuredKey()
+        server.enqueue(MockResponse().setBody("""{"data":[]}"""))
+
+        val failure = repository.testConnection(id).exceptionOrNull() as GeckoException
+
+        assertEquals(ErrorKind.ModelUnavailable, failure.error.kind)
+        assertEquals(1, server.requestCount)
+    }
 
     private lateinit var server: MockWebServer
     private lateinit var secureKeyRepository: FakeSecureKeyRepository

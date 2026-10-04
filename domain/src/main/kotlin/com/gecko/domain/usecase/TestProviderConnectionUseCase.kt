@@ -8,6 +8,9 @@ import com.gecko.core.model.error.GeckoException
 import com.gecko.core.model.provider.ConnectionStatus
 import com.gecko.domain.repository.ChatCompletionRepository
 import com.gecko.domain.repository.ProviderConfigRepository
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 
 class TestProviderConnectionUseCase @Inject constructor(
     private val chatCompletionRepository: ChatCompletionRepository,
@@ -15,7 +18,18 @@ class TestProviderConnectionUseCase @Inject constructor(
 ) {
     suspend operator fun invoke(id: String): Result<Unit> {
         providerConfigRepository.setConnectionStatus(id, ConnectionStatus.Testing)
-        val result = chatCompletionRepository.testConnection(id)
+        val result = try {
+            chatCompletionRepository.testConnection(id).also { result ->
+                (result.exceptionOrNull() as? CancellationException)?.let { throw it }
+            }
+        } catch (cancelled: CancellationException) {
+            withContext(NonCancellable) {
+                providerConfigRepository.setConnectionStatus(id, ConnectionStatus.Untested)
+            }
+            throw cancelled
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
         providerConfigRepository.setConnectionStatus(
             id,
             result.fold(

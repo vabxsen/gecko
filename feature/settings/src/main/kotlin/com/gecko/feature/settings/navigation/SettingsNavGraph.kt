@@ -14,7 +14,7 @@ import com.gecko.feature.settings.providers.AiProvidersScreen
 import com.gecko.feature.settings.providers.ProviderDetailScreen
 import com.gecko.feature.settings.providers.ModelSelectionScreen
 
-fun NavGraphBuilder.settingsGraph(navController: NavController) {
+fun NavGraphBuilder.settingsGraph(navController: NavController, onConnected: () -> Unit) {
     composable<SettingsRoute> {
         SettingsListScreen(
             onBack = { navController.popBackStack() },
@@ -41,14 +41,7 @@ fun NavGraphBuilder.settingsGraph(navController: NavController) {
     composable<AddProviderRoute> {
         AddProviderScreen(
             onBack = { navController.popBackStack() },
-            // Straight into the model list for the key just added, so "add a key" and "pick a
-            // model" are one uninterrupted flow. popUpTo means Back lands on the provider list
-            // rather than dropping the user into the form they just completed.
-            onSaved = { configId ->
-                navController.navigate(ModelSelectionRoute(configId)) {
-                    popUpTo(AiProvidersRoute)
-                }
-            },
+            onSaved = { onConnected() },
         )
     }
     composable<ProviderDetailRoute> { backStackEntry ->

@@ -78,7 +78,7 @@ fun MessageList(
         ) {
             // Emitted first, so under `reverseLayout` it lands at the very bottom: breathing room
             // between the newest message and the composer.
-            item { Spacer(Modifier.padding(bottom = 68.dp)) }
+            item(key = "bottom-spacing") { Spacer(Modifier.padding(bottom = 4.dp)) }
 
             // Reversed to match the reversed layout, so the newest message is the one pinned to
             // the bottom. `asReversed()` is a view over the same list, not a copy.

@@ -6,6 +6,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -55,9 +59,9 @@ fun ProviderDetailScreen(
     viewModel: ProviderDetailViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    var apiKeyInput by rememberSaveable { mutableStateOf("") }
-    var apiKeyInitialized by rememberSaveable { mutableStateOf(false) }
-    var keyVisible by rememberSaveable { mutableStateOf(true) }
+    var apiKeyInput by remember { mutableStateOf("") }
+    var apiKeyInitialized by remember { mutableStateOf(false) }
+    var keyVisible by remember { mutableStateOf(false) }
     var labelInput by rememberSaveable { mutableStateOf("") }
     var labelInitialized by rememberSaveable { mutableStateOf(false) }
     var baseUrlInput by rememberSaveable { mutableStateOf("") }
@@ -88,6 +92,10 @@ fun ProviderDetailScreen(
         modifier = modifier,
         topBar = { SettingsTopBar(title = uiState.label.ifBlank { "API key" }, onBack = onBack) },
     ) { innerPadding ->
+        if (uiState.isLoading) {
+            CircularProgressIndicator(modifier = Modifier.padding(innerPadding).padding(20.dp).size(24.dp))
+            return@Scaffold
+        }
         if (uiState.config == null) {
             Text(
                 text = "This API key was removed.",
@@ -98,7 +106,7 @@ fun ProviderDetailScreen(
             return@Scaffold
         }
 
-        LazyColumn(modifier = Modifier.padding(innerPadding)) {
+        LazyColumn(modifier = Modifier.padding(innerPadding).imePadding()) {
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
@@ -159,6 +167,8 @@ fun ProviderDetailScreen(
                         modifier = Modifier.fillMaxWidth(),
                         label = { Text("API key") },
                         singleLine = true,
+                        enabled = uiState.isApiKeyLoaded && !uiState.isSavingKey,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                         visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
                         trailingIcon = {
                             IconButton(onClick = { keyVisible = !keyVisible }) {
@@ -177,7 +187,10 @@ fun ProviderDetailScreen(
                             Text(if (uiState.isSavingKey) "Saving…" else "Save")
                         }
                         if (uiState.hasApiKey) {
-                            OutlinedButton(onClick = { viewModel.clearApiKey(); apiKeyInput = "" }) { Text("Remove") }
+                            OutlinedButton(
+                                onClick = { viewModel.clearApiKey(); apiKeyInput = "" },
+                                enabled = !uiState.isSavingKey,
+                            ) { Text("Remove") }
                         }
                     }
                     uiState.saveKeyErrorMessage?.let { message ->
@@ -233,9 +246,20 @@ fun ProviderDetailScreen(
                     verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                 ) {
                     ConnectionStatusLabel(uiState.connectionStatus, modifier = Modifier.weight(1f).padding(end = 8.dp))
-                    TextButton(onClick = viewModel::testConnection, enabled = uiState.hasApiKey) {
+                    TextButton(
+                        onClick = viewModel::testConnection,
+                        enabled = uiState.hasApiKey && !uiState.isSavingKey && uiState.connectionStatus != ConnectionStatus.Testing,
+                    ) {
                         Text("Test connection")
                     }
+                }
+                (uiState.connectionStatus as? ConnectionStatus.Failure)?.let { failure ->
+                    Text(
+                        text = failure.error.copyForUser().explanation,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                    )
                 }
                 HorizontalDivider()
 
@@ -246,7 +270,7 @@ fun ProviderDetailScreen(
                     SettingsSectionHeader("Model", modifier = Modifier.padding(0.dp))
                     TextButton(onClick = viewModel::refreshModels, enabled = uiState.hasApiKey && !uiState.isLoadingModels) {
                         if (uiState.isLoadingModels) {
-                            CircularProgressIndicator(modifier = Modifier.padding(end = 8.dp))
+                            CircularProgressIndicator(modifier = Modifier.padding(end = 8.dp).size(18.dp), strokeWidth = 2.dp)
                         } else {
                             Icon(Icons.Outlined.Refresh, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
                         }

@@ -29,6 +29,10 @@ class FakeUserPreferencesRepository : UserPreferencesRepository {
         state.update { it.copy(defaultModelId = modelId) }
     }
 
+    override suspend fun setDefaultSelection(configId: String?, modelId: String?) {
+        state.update { it.copy(defaultProviderConfigId = configId, defaultModelId = modelId) }
+    }
+
     override suspend fun setSendOnEnter(enabled: Boolean) {
         state.update { it.copy(sendOnEnter = enabled) }
     }

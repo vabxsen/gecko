@@ -19,6 +19,7 @@ import com.gecko.core.provider.internal.RetryPolicy
 import com.gecko.core.provider.internal.bodyOrThrow
 import com.gecko.core.provider.internal.classifyProviderError
 import com.gecko.core.provider.internal.executeWithRetry
+import com.gecko.core.provider.internal.providerResult
 import com.gecko.core.provider.internal.toGeckoError
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -140,7 +141,7 @@ class AnthropicProvider(
         emit(ChatEvent.Error(error = e.toGeckoError(), cause = e))
     }
 
-    override suspend fun listModels(): Result<List<ModelInfo>> = runCatching {
+    override suspend fun listModels(): Result<List<ModelInfo>> = providerResult {
         val request = Request.Builder()
             .url("$baseUrl/models")
             .applyAuthHeaders(apiKey)

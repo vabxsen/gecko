@@ -18,6 +18,8 @@ import java.time.Instant
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.withContext
@@ -62,7 +64,9 @@ class SendChatMessageUseCase @Inject constructor(
         var generatedImageBase64: String? = null
         var lastPersistedAtMs = 0L
 
-        return chatCompletionRepository.sendMessage(configId, modelId, history, streaming)
+        return flow {
+            emitAll(chatCompletionRepository.sendMessage(configId, modelId, history, streaming))
+        }
             .onEach { event ->
                 when (event) {
                     is ChatEvent.ContentDelta -> {

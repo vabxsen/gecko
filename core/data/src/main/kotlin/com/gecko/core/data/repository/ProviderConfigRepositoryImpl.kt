@@ -89,8 +89,7 @@ class ProviderConfigRepositoryImpl @Inject constructor(
         modelCatalogDao.observeForConfig(id).map { entities -> entities.map { it.toDomain() } }
 
     override suspend fun saveModels(id: String, models: List<ModelInfo>) = withContext(dispatchers.io) {
-        modelCatalogDao.deleteForConfig(id)
-        modelCatalogDao.upsertAll(models.map { it.toEntity(id) })
+        modelCatalogDao.replaceForConfig(id, models.map { it.toEntity(id) })
     }
 
     override suspend fun clearAll() = withContext(dispatchers.io) {

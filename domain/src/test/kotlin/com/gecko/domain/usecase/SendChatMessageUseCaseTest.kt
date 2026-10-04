@@ -26,6 +26,21 @@ import org.junit.Test
 class SendChatMessageUseCaseTest {
 
     @Test
+    fun failureBeforeTheStreamStartsDoesNotLeaveAStreamingPlaceholder() = runTest {
+        val conversations = FakeConversationRepository()
+        val conversation = conversations.createConversation(ProviderId.OPENAI, "gpt-4o")
+        val chat = FakeChatCompletionRepository(flowBuilder = { throw IllegalArgumentException("Invalid endpoint") })
+        val send = SendChatMessageUseCase(conversations, chat)
+
+        val result = runCatching {
+            send(conversation.id, "key", ProviderId.OPENAI, "gpt-4o", emptyList(), true).collect {}
+        }
+
+        org.junit.Assert.assertTrue(result.isFailure)
+        assertEquals(MessageStatus.ERROR, conversations.observeMessages(conversation.id).first().single().status)
+    }
+
+    @Test
     fun successfulStreamPersistsCompleteMessage() = runTest {
         val conversationRepo = FakeConversationRepository()
         val conversation = conversationRepo.createConversation(ProviderId.OPENAI, "gpt-4o")

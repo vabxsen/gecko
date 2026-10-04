@@ -6,23 +6,20 @@ import com.gecko.core.model.error.ErrorKind
 import com.gecko.core.model.error.GeckoError
 import com.gecko.core.model.error.GeckoException
 import com.gecko.core.model.provider.ProviderId
-import com.gecko.domain.model.curatedForSelection
 import com.gecko.domain.repository.ProviderConfigRepository
-import com.gecko.domain.repository.UserPreferencesRepository
-import com.gecko.domain.usecase.RefreshProviderModelsUseCase
+import com.gecko.domain.usecase.ConnectProviderUseCase
 import com.gecko.domain.usecase.SaveProviderApiKeyUseCase
-import com.gecko.domain.usecase.TestProviderConnectionUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
-/** One selectable row in "Add API key" — either a plain protocol (baseUrl = null) or an
- * OpenAI-compatible service reached through the OpenAI protocol with a different base URL. */
 data class AddProviderOption(val label: String, val providerId: ProviderId, val baseUrl: String?)
 
 val ADD_PROVIDER_OPTIONS: List<AddProviderOption> =
@@ -30,10 +27,25 @@ val ADD_PROVIDER_OPTIONS: List<AddProviderOption> =
         OPENAI_COMPATIBLE_ENDPOINTS.filter { it.baseUrl != null }
             .map { AddProviderOption(it.label, ProviderId.OPENAI, it.baseUrl) }
 
+/** Local hints only. Generic sk- keys are ambiguous and must never be tried at multiple vendors. */
+internal fun detectProvider(key: String): AddProviderOption? {
+    val trimmed = key.trim()
+    val label = when {
+        trimmed.startsWith("sk-ant-api") -> "Anthropic"
+        trimmed.startsWith("sk-or-v1-") -> "OpenRouter"
+        trimmed.startsWith("nvapi-") -> "NVIDIA NIM"
+        trimmed.startsWith("AIza") -> "Google Gemini"
+        trimmed.startsWith("sk-proj-") || trimmed.startsWith("sk-svcacct-") -> "OpenAI"
+        else -> return null
+    }
+    return ADD_PROVIDER_OPTIONS.first { it.label == label }
+}
+
 data class AddProviderUiState(
     val selectedProviderId: ProviderId? = null,
+    val providerLabel: String = "",
+    val providerManuallySelected: Boolean = false,
     val label: String = "",
-    val labelManuallyEdited: Boolean = false,
     val apiKey: String = "",
     val baseUrlOverride: String = "",
     val isSaving: Boolean = false,
@@ -45,114 +57,77 @@ data class AddProviderUiState(
 @HiltViewModel
 class AddProviderViewModel @Inject constructor(
     private val providerConfigRepository: ProviderConfigRepository,
-    private val userPreferencesRepository: UserPreferencesRepository,
     private val saveProviderApiKeyUseCase: SaveProviderApiKeyUseCase,
-    private val testProviderConnectionUseCase: TestProviderConnectionUseCase,
-    private val refreshProviderModelsUseCase: RefreshProviderModelsUseCase,
+    private val connectProviderUseCase: ConnectProviderUseCase,
 ) : ViewModel() {
-
     private val _uiState = MutableStateFlow(AddProviderUiState())
     val uiState: StateFlow<AddProviderUiState> = _uiState.asStateFlow()
+    private var connected = false
 
     fun selectOption(option: AddProviderOption) {
+        if (_uiState.value.isSaving) return
         _uiState.update {
-            it.copy(
-                selectedProviderId = option.providerId,
-                baseUrlOverride = option.baseUrl.orEmpty(),
-                label = if (it.labelManuallyEdited) it.label else option.label,
-                error = null,
-            )
+            it.copy(selectedProviderId = option.providerId, providerLabel = option.label,
+                providerManuallySelected = true, baseUrlOverride = option.baseUrl.orEmpty(), error = null)
         }
     }
 
     fun updateLabel(label: String) {
-        _uiState.update { it.copy(label = label, labelManuallyEdited = true) }
+        if (!_uiState.value.isSaving) _uiState.update { it.copy(label = label) }
     }
 
     fun updateApiKey(key: String) {
-        _uiState.update { it.copy(apiKey = key) }
-    }
-
-    fun dismissError() {
-        _uiState.update { it.copy(error = null) }
+        if (_uiState.value.isSaving) return
+        val detected = detectProvider(key)
+        _uiState.update {
+            if (it.providerManuallySelected) it.copy(apiKey = key, error = null)
+            else it.copy(apiKey = key, selectedProviderId = detected?.providerId,
+                providerLabel = detected?.label.orEmpty(), baseUrlOverride = detected?.baseUrl.orEmpty(), error = null)
+        }
     }
 
     fun updateBaseUrlOverride(url: String) {
-        _uiState.update { it.copy(baseUrlOverride = url) }
+        if (!_uiState.value.isSaving) _uiState.update { it.copy(baseUrlOverride = url, providerManuallySelected = true, error = null) }
     }
 
     fun save(onSaved: (String) -> Unit) {
         val state = _uiState.value
+        if (!state.canSave || connected) return
         val providerId = state.selectedProviderId ?: return
         val key = state.apiKey.trim()
-        if (key.isEmpty()) return
-
+        _uiState.update { it.copy(isSaving = true, error = null) }
         viewModelScope.launch {
-            _uiState.update { it.copy(isSaving = true, error = null) }
-            val label = state.label.trim().ifBlank { providerId.displayName }
-            val baseUrlOverride = state.baseUrlOverride.trim().ifBlank { null }
-            providerConfigRepository.addProvider(providerId, label)
-                .onSuccess { id ->
-                    if (providerId == ProviderId.OPENAI) {
-                        providerConfigRepository.setBaseUrlOverride(id, baseUrlOverride)
-                    }
-                    val saveResult = runCatching { saveProviderApiKeyUseCase(id, key) }
-                    if (saveResult.isFailure) {
-                        providerConfigRepository.removeProvider(id)
-                        _uiState.update {
-                            it.copy(
-                                isSaving = false,
-                                error = GeckoError(
-                                    ErrorKind.Unknown,
-                                    technicalDetail = "This device couldn't securely store the key.",
-                                ),
-                            )
-                        }
-                        return@onSuccess
-                    }
-
-                    testProviderConnectionUseCase(id)
-                        .onSuccess {
-                            val models = refreshProviderModelsUseCase(id).getOrDefault(emptyList())
-                            maybeAdoptAsDefault(id, providerId, models, baseUrlOverride)
-                            _uiState.update { it.copy(isSaving = false) }
-                            onSaved(id)
-                        }
-                        .onFailure { e ->
-                            providerConfigRepository.removeProvider(id)
-                            _uiState.update {
-                                it.copy(isSaving = false, error = e.asGeckoError(label))
-                            }
-                        }
+            var createdId: String? = null
+            var ready = false
+            try {
+                val label = state.label.trim().ifBlank { state.providerLabel }
+                val id = providerConfigRepository.addProvider(providerId, label).getOrThrow()
+                createdId = id
+                providerConfigRepository.setEnabled(id, false)
+                if (providerId == ProviderId.OPENAI) {
+                    providerConfigRepository.setBaseUrlOverride(id, state.baseUrlOverride.trim().ifBlank { null })
                 }
-                .onFailure { e ->
-                    _uiState.update { it.copy(isSaving = false, error = e.asGeckoError(label)) }
+                saveProviderApiKeyUseCase(id, key)
+                connectProviderUseCase(id).getOrThrow()
+                ready = true
+                connected = true
+                _uiState.update { it.copy(apiKey = "") }
+                onSaved(id)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                _uiState.update {
+                    it.copy(error = ((error as? GeckoException)?.error
+                        ?: GeckoError(ErrorKind.Unknown, error.message)).copy(providerLabel = state.providerLabel))
                 }
+            } finally {
+                // Failed setup stays on the same form with the pasted key intact, ready to retry.
+                // It must not leave an unusable provider or a false "connected" state behind.
+                if (!ready) createdId?.let { id ->
+                    withContext(NonCancellable) { providerConfigRepository.removeProvider(id) }
+                }
+                _uiState.update { it.copy(isSaving = false) }
+            }
         }
-    }
-
-    /**
-     * Whatever the provider said, in the app's own vocabulary — so a rejected key reads the same
-     * here as it does mid-chat instead of dumping raw vendor JSON under the text field.
-     */
-    private fun Throwable.asGeckoError(providerLabel: String): GeckoError =
-        ((this as? GeckoException)?.error ?: GeckoError(ErrorKind.Unknown, technicalDetail = message))
-            .copy(providerLabel = providerLabel)
-
-    /** The first key a user ever adds should just work in chat with no separate trip to Settings
-     * — but never override a default the user already chose explicitly. */
-    private suspend fun maybeAdoptAsDefault(
-        configId: String,
-        providerId: ProviderId,
-        models: List<com.gecko.core.model.provider.ModelInfo>,
-        baseUrlOverride: String?,
-    ) {
-        val hasDefault = userPreferencesRepository.userPreferences.first().defaultProviderConfigId != null
-        if (hasDefault) return
-        val modelId = models.curatedForSelection(providerId, baseUrlOverride).defaultChoice?.modelId
-            ?: models.firstOrNull()?.modelId
-            ?: return
-        userPreferencesRepository.setDefaultProviderConfig(configId)
-        userPreferencesRepository.setDefaultModel(modelId)
     }
 }

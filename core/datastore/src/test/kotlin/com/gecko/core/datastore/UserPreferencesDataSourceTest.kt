@@ -5,6 +5,9 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.gecko.core.model.preferences.ThemeMode
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Before
 import org.junit.Rule
@@ -18,6 +21,25 @@ import java.util.UUID
 
 @RunWith(AndroidJUnit4::class)
 class UserPreferencesDataSourceTest {
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test
+    fun changingSelectionNeverEmitsAMismatchedProviderAndModel() = runTest {
+        dataSource.setDefaultSelection("openai-key", "gpt-4o")
+        val observed = mutableListOf<Pair<String?, String?>>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            dataSource.userPreferences.collect { observed += it.defaultProviderConfigId to it.defaultModelId }
+        }
+
+        dataSource.setDefaultSelection("gemini-key", "gemini-flash")
+        val final = dataSource.userPreferences.first()
+
+        assertEquals("gemini-key", final.defaultProviderConfigId)
+        assertEquals("gemini-flash", final.defaultModelId)
+        org.junit.Assert.assertTrue(observed.all {
+            it == ("openai-key" to "gpt-4o") || it == ("gemini-key" to "gemini-flash")
+        })
+    }
 
     @get:Rule
     val tmpFolder = TemporaryFolder()

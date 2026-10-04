@@ -17,6 +17,15 @@ import org.junit.Assert.assertTrue
 @RunWith(AndroidJUnit4::class)
 class AndroidKeystoreSecureKeyStoreTest {
 
+    @Test
+    fun corruptCiphertextIsReportedAsUnreadableWithoutCrashing() = runBlocking {
+        context.getSharedPreferences("gecko_secure_prefs", Context.MODE_PRIVATE)
+            .edit().putString("api_key_openai", "!invalid-base64!").commit()
+
+        assertNull(store.getApiKey("openai"))
+        assertTrue(store.hasApiKey("openai"))
+    }
+
     private lateinit var context: Context
     private lateinit var store: SecureKeyStore
 
@@ -24,61 +33,61 @@ class AndroidKeystoreSecureKeyStoreTest {
     fun setUp() = runBlocking {
         context = InstrumentationRegistry.getInstrumentation().targetContext
         store = AndroidKeystoreSecureKeyStore(context)
-        ProviderId.entries.forEach { store.clearApiKey(it) }
+        ProviderId.entries.forEach { store.clearApiKey(it.slug) }
     }
 
     @Test
     fun savedKeyCanBeRetrieved() = runBlocking {
-        store.saveApiKey(ProviderId.OPENAI, "sk-test-12345")
+        store.saveApiKey(ProviderId.OPENAI.slug, "sk-test-12345")
 
-        assertEquals("sk-test-12345", store.getApiKey(ProviderId.OPENAI))
+        assertEquals("sk-test-12345", store.getApiKey(ProviderId.OPENAI.slug))
     }
 
     @Test
     fun missingKeyReturnsNull() = runBlocking {
-        assertNull(store.getApiKey(ProviderId.OPENAI))
+        assertNull(store.getApiKey(ProviderId.OPENAI.slug))
     }
 
     @Test
     fun hasApiKeyReflectsPresence() = runBlocking {
-        assertFalse(store.hasApiKey(ProviderId.ANTHROPIC))
+        assertFalse(store.hasApiKey(ProviderId.ANTHROPIC.slug))
 
-        store.saveApiKey(ProviderId.ANTHROPIC, "key")
+        store.saveApiKey(ProviderId.ANTHROPIC.slug, "key")
 
-        assertTrue(store.hasApiKey(ProviderId.ANTHROPIC))
+        assertTrue(store.hasApiKey(ProviderId.ANTHROPIC.slug))
     }
 
     @Test
     fun clearRemovesKey() = runBlocking {
-        store.saveApiKey(ProviderId.GOOGLE, "key")
+        store.saveApiKey(ProviderId.GOOGLE.slug, "key")
 
-        store.clearApiKey(ProviderId.GOOGLE)
+        store.clearApiKey(ProviderId.GOOGLE.slug)
 
-        assertNull(store.getApiKey(ProviderId.GOOGLE))
-        assertFalse(store.hasApiKey(ProviderId.GOOGLE))
+        assertNull(store.getApiKey(ProviderId.GOOGLE.slug))
+        assertFalse(store.hasApiKey(ProviderId.GOOGLE.slug))
     }
 
     @Test
     fun differentProvidersAreIsolated() = runBlocking {
-        store.saveApiKey(ProviderId.OPENAI, "openai-key")
-        store.saveApiKey(ProviderId.OPENROUTER, "openrouter-key")
+        store.saveApiKey(ProviderId.OPENAI.slug, "openai-key")
+        store.saveApiKey(ProviderId.OPENROUTER.slug, "openrouter-key")
 
-        assertEquals("openai-key", store.getApiKey(ProviderId.OPENAI))
-        assertEquals("openrouter-key", store.getApiKey(ProviderId.OPENROUTER))
+        assertEquals("openai-key", store.getApiKey(ProviderId.OPENAI.slug))
+        assertEquals("openrouter-key", store.getApiKey(ProviderId.OPENROUTER.slug))
     }
 
     @Test
     fun overwritingAKeyReplacesThePreviousValue() = runBlocking {
-        store.saveApiKey(ProviderId.OPENAI, "first-value")
-        store.saveApiKey(ProviderId.OPENAI, "second-value")
+        store.saveApiKey(ProviderId.OPENAI.slug, "first-value")
+        store.saveApiKey(ProviderId.OPENAI.slug, "second-value")
 
-        assertEquals("second-value", store.getApiKey(ProviderId.OPENAI))
+        assertEquals("second-value", store.getApiKey(ProviderId.OPENAI.slug))
     }
 
     @Test
     fun persistedValueIsNotPlaintext() = runBlocking {
         val secret = "super-secret-plaintext-value"
-        store.saveApiKey(ProviderId.OPENAI, secret)
+        store.saveApiKey(ProviderId.OPENAI.slug, secret)
 
         val prefs = context.getSharedPreferences("gecko_secure_prefs", Context.MODE_PRIVATE)
         val stored = prefs.getString("api_key_openai", null)

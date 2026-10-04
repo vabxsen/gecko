@@ -9,6 +9,7 @@ import com.gecko.core.provider.internal.ProviderHttpException
 import com.gecko.core.provider.internal.ProviderJson
 import com.gecko.core.provider.internal.bodyOrThrow
 import com.gecko.core.provider.internal.executeWithRetry
+import com.gecko.core.provider.internal.providerResult
 import com.gecko.core.provider.openai.OpenAiChatEngine
 import com.gecko.core.provider.openai.toReadableException
 import kotlinx.coroutines.flow.Flow
@@ -40,7 +41,7 @@ class OpenRouterProvider(
     override suspend fun sendMessage(messages: List<ChatMessage>, model: String, stream: Boolean): Flow<ChatEvent> =
         engine.sendMessage(messages, model, stream)
 
-    override suspend fun listModels(): Result<List<ModelInfo>> = runCatching {
+    override suspend fun listModels(): Result<List<ModelInfo>> = providerResult {
         val request = Request.Builder()
             .url("$baseUrl/models")
             .header("Authorization", "Bearer $apiKey")

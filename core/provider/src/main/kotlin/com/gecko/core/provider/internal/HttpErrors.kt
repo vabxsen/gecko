@@ -13,6 +13,15 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.Response
+import kotlinx.coroutines.CancellationException
+
+internal suspend fun <T> providerResult(block: suspend () -> T): Result<T> = try {
+    Result.success(block())
+} catch (cancelled: CancellationException) {
+    throw cancelled
+} catch (error: Exception) {
+    Result.failure(GeckoException(error.toGeckoError()))
+}
 
 /**
  * The message is sanitised at construction rather than at the point of display, because there is
@@ -109,7 +118,8 @@ internal fun Throwable.httpStatusCodeOrNull(): Int? {
 internal fun classifyProviderError(statusCode: Int?, detail: String?, cause: Throwable?): GeckoError {
     val body = detail.orEmpty().unwrapErrorEnvelope()
     val kind = when {
-        statusCode == 401 || statusCode == 403 -> ErrorKind.InvalidApiKey
+        statusCode == 401 -> ErrorKind.InvalidApiKey
+        statusCode == 403 -> ErrorKind.PermissionDenied
         // Google answers a bad key with 400 INVALID_ARGUMENT rather than 401, so status code alone
         // would file it under "bad request" and tell the user to try another model. Verified live.
         statusCode == 400 && KEY_WORDING.containsMatchIn(body) -> ErrorKind.InvalidApiKey

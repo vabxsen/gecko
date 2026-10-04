@@ -11,6 +11,7 @@ interface UserPreferencesRepository {
     suspend fun setDynamicColorEnabled(enabled: Boolean)
     suspend fun setDefaultProviderConfig(configId: String?)
     suspend fun setDefaultModel(modelId: String?)
+    suspend fun setDefaultSelection(configId: String?, modelId: String?)
     suspend fun setSendOnEnter(enabled: Boolean)
     suspend fun setStreamingEnabled(enabled: Boolean)
     suspend fun setOnboardingCompleted(completed: Boolean)

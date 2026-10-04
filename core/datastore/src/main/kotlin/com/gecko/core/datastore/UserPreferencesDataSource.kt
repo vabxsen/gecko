@@ -60,6 +60,15 @@ class UserPreferencesDataSource(
         }
     }
 
+    suspend fun setDefaultSelection(configId: String?, modelId: String?) {
+        dataStore.edit {
+            if (configId == null) it.remove(PreferencesKeys.DEFAULT_PROVIDER_CONFIG_ID)
+            else it[PreferencesKeys.DEFAULT_PROVIDER_CONFIG_ID] = configId
+            if (modelId == null) it.remove(PreferencesKeys.DEFAULT_MODEL_ID)
+            else it[PreferencesKeys.DEFAULT_MODEL_ID] = modelId
+        }
+    }
+
     suspend fun setSendOnEnter(enabled: Boolean) {
         dataStore.edit { it[PreferencesKeys.SEND_ON_ENTER] = enabled }
     }

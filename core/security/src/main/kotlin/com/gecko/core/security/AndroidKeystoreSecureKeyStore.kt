@@ -46,7 +46,11 @@ class AndroidKeystoreSecureKeyStore(
      */
     override suspend fun getApiKey(id: String): String? = withContext(dispatcher) {
         val encoded = prefs().getString(prefsKey(id), null) ?: return@withContext null
-        val combined = Base64.decode(encoded, Base64.NO_WRAP)
+        val combined = try {
+            Base64.decode(encoded, Base64.NO_WRAP)
+        } catch (_: IllegalArgumentException) {
+            return@withContext null
+        }
         if (combined.size <= IV_LENGTH_BYTES) return@withContext null
         val iv = combined.copyOfRange(0, IV_LENGTH_BYTES)
         val ciphertext = combined.copyOfRange(IV_LENGTH_BYTES, combined.size)
@@ -73,6 +77,7 @@ class AndroidKeystoreSecureKeyStore(
 
     private fun prefsKey(id: String) = "api_key_$id"
 
+    @Synchronized
     private fun getOrCreateSecretKey(): SecretKey {
         (keyStore.getKey(KEYSTORE_ALIAS, null) as? SecretKey)?.let { return it }
 
@@ -92,9 +97,10 @@ class AndroidKeystoreSecureKeyStore(
             } catch (_: StrongBoxUnavailableException) {
                 // Fall through to a non-StrongBox key below.
             }
+            baseSpec.setIsStrongBoxBacked(false)
         }
 
-        keyGenerator.init(baseSpec.setIsStrongBoxBacked(false).build())
+        keyGenerator.init(baseSpec.build())
         return keyGenerator.generateKey()
     }
 

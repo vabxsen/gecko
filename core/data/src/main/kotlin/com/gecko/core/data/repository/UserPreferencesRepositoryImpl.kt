@@ -17,6 +17,8 @@ class UserPreferencesRepositoryImpl @Inject constructor(
     override suspend fun setDynamicColorEnabled(enabled: Boolean) = dataSource.setDynamicColorEnabled(enabled)
     override suspend fun setDefaultProviderConfig(configId: String?) = dataSource.setDefaultProviderConfig(configId)
     override suspend fun setDefaultModel(modelId: String?) = dataSource.setDefaultModel(modelId)
+    override suspend fun setDefaultSelection(configId: String?, modelId: String?) =
+        dataSource.setDefaultSelection(configId, modelId)
     override suspend fun setSendOnEnter(enabled: Boolean) = dataSource.setSendOnEnter(enabled)
     override suspend fun setStreamingEnabled(enabled: Boolean) = dataSource.setStreamingEnabled(enabled)
     override suspend fun setOnboardingCompleted(completed: Boolean) = dataSource.setOnboardingCompleted(completed)

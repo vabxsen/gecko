@@ -26,6 +26,8 @@ android {
     }
 
     testOptions {
+        // Match the app so Android does not cover clipboard tests with a legacy-target dialog.
+        targetSdk = 36
         unitTests {
             isIncludeAndroidResources = true
         }

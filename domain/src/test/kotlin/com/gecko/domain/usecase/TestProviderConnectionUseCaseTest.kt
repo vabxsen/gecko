@@ -15,6 +15,20 @@ import org.junit.Test
 class TestProviderConnectionUseCaseTest {
 
     @Test
+    fun cancelledConnectionCheckResetsTestingStatusAndPropagatesCancellation() = runTest {
+        val configs = FakeProviderConfigRepository()
+        val id = configs.addProvider(ProviderId.OPENAI, "OpenAI").getOrThrow()
+        val chat = FakeChatCompletionRepository(
+            testConnectionResult = Result.failure(kotlinx.coroutines.CancellationException("Cancelled")),
+        )
+
+        val result = runCatching { TestProviderConnectionUseCase(chat, configs)(id) }
+
+        assertTrue(result.exceptionOrNull() is kotlinx.coroutines.CancellationException)
+        assertEquals(ConnectionStatus.Untested, configs.currentStatus(id))
+    }
+
+    @Test
     fun successUpdatesStatusToSuccess() = runTest {
         val configRepo = FakeProviderConfigRepository()
         val id = configRepo.addProvider(ProviderId.OPENAI, "OpenAI").getOrThrow()

@@ -13,6 +13,7 @@ import com.gecko.core.model.chat.MessageStatus
 import com.gecko.core.model.provider.ModelInfo
 import com.gecko.core.model.provider.ProviderConfig
 import com.gecko.core.model.provider.ProviderId
+import com.gecko.core.model.provider.ConnectionStatus
 import com.gecko.domain.model.curatedForSelection
 import com.gecko.domain.repository.ConversationRepository
 import com.gecko.domain.repository.ProviderConfigRepository
@@ -25,12 +26,12 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import java.time.Instant
 import javax.inject.Inject
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -55,8 +56,12 @@ class ChatViewModel @Inject constructor(
 
     private val currentConversationId = MutableStateFlow<String?>(null)
     private val searchQuery = MutableStateFlow("")
-    private val selectedConfigId = MutableStateFlow<String?>(null)
-    private val selectedModelId = MutableStateFlow<String?>(null)
+    private data class ModelSelection(val configId: String?, val modelId: String?)
+
+    private val selection: StateFlow<ModelSelection?> = userPreferencesRepository.userPreferences
+        .map { ModelSelection(it.defaultProviderConfigId, it.defaultModelId) }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
     private val editingMessageId = MutableStateFlow<String?>(null)
     /**
      * The failure currently worth interrupting someone about. Holds the whole [GeckoError] rather
@@ -82,8 +87,9 @@ class ChatViewModel @Inject constructor(
             if (query.isBlank()) conversationRepository.observeConversations() else conversationRepository.searchConversations(query)
         }
 
-    private val messages = currentConversationId.flatMapLatest { id ->
-        if (id == null) flowOf(emptyList()) else conversationRepository.observeMessages(id)
+    private val chatSection = currentConversationId.flatMapLatest { id ->
+        val messages = if (id == null) flowOf(emptyList()) else conversationRepository.observeMessages(id)
+        combine(messages, isGenerating) { history, generating -> ChatSection(id, history, generating) }
     }
 
     private val providerConfigs = providerConfigRepository.observeAll()
@@ -119,10 +125,13 @@ class ChatViewModel @Inject constructor(
         val error: GeckoError?,
     )
 
-    private val chatSection = combine(currentConversationId, messages, isGenerating, ::ChatSection)
     private val providerSection =
-        combine(providerConfigs, selectedConfigId, selectedModelId, modelCatalog, loadingModelConfigIds, ::ProviderSection)
-    private val miscSection = combine(conversations, editingMessageId, activeError, ::MiscSection)
+        combine(providerConfigs, selection, modelCatalog, loadingModelConfigIds) { configs, selected, catalog, loading ->
+            ProviderSection(configs, selected?.configId, selected?.modelId, catalog, loading)
+        }
+    private val miscSection = combine(conversations, editingMessageId, activeError, searchQuery) { chats, editing, error, _ ->
+        MiscSection(chats, editing, error)
+    }
 
     val uiState: StateFlow<ChatUiState> = combine(
         chatSection,
@@ -150,18 +159,19 @@ class ChatViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            userPreferencesRepository.userPreferences.collectLatest { prefs ->
-                selectedConfigId.value = prefs.defaultProviderConfigId
-                selectedModelId.value = prefs.defaultModelId
-            }
-        }
-        viewModelScope.launch {
-            combine(providerConfigs, selectedConfigId, selectedModelId, modelCatalog) { configs, configId, modelId, catalog ->
-                val selected = configs.find { it.id == configId }
+            combine(providerConfigs, selection, modelCatalog) { configs, selection, catalog ->
+                selection ?: return@combine null
+                if (configs.any { it.id == selection.configId && it.connectionStatus == ConnectionStatus.Testing }) {
+                    return@combine null
+                }
+                val modelId = selection.modelId
+                val selected = configs.find { it.id == selection.configId && it.enabled && it.hasApiKey }
                 // Nothing chosen yet — a fresh install, or the chosen key was deleted. Adopt the
                 // first usable key rather than leaving the composer unsendable until the user
                 // finds their way to Settings.
-                val config = selected ?: configs.firstOrNull { it.enabled && it.hasApiKey } ?: return@combine null
+                val config = selected ?: configs.firstOrNull {
+                    it.enabled && it.hasApiKey && it.connectionStatus != ConnectionStatus.Testing
+                } ?: return@combine null
                 val models = catalog[config.id].orEmpty()
                 // Otherwise only step in when the selection is unusable — no model at all, or one
                 // this provider no longer offers (a retired or renamed id). Anything the catalog
@@ -171,13 +181,10 @@ class ChatViewModel @Inject constructor(
                 val curated = models.curatedForSelection(config.providerId, config.baseUrlOverride)
                 val preferredModel = curated.defaultChoice ?: return@combine null
                 config.id to preferredModel.modelId
-            }.collectLatest { replacement ->
-                replacement ?: return@collectLatest
+            }.distinctUntilChanged().collect { replacement ->
+                replacement ?: return@collect
                 val (configId, modelId) = replacement
-                selectedConfigId.value = configId
-                selectedModelId.value = modelId
-                userPreferencesRepository.setDefaultProviderConfig(configId)
-                userPreferencesRepository.setDefaultModel(modelId)
+                userPreferencesRepository.setDefaultSelection(configId, modelId)
             }
         }
         // A key whose catalog was never cached (its fetch failed when the key was saved, or the
@@ -205,13 +212,13 @@ class ChatViewModel @Inject constructor(
         editingMessageId.value = null
     }
 
-    fun sendMessage(text: String, attachmentImageBase64: String? = null) {
-        if (isGenerating.value) return
+    fun sendMessage(text: String, attachmentImageBase64: String? = null): Boolean {
+        if (isGenerating.value) return false
         val trimmed = text.trim()
-        if (trimmed.isEmpty() && attachmentImageBase64 == null) return
-        val configId = selectedConfigId.value
-        val modelId = selectedModelId.value
-        if (configId == null || modelId == null) {
+        if (trimmed.isEmpty() && attachmentImageBase64 == null) return false
+        val configId = selection.value?.configId
+        val modelId = selection.value?.modelId
+        if (configId == null || modelId == null || uiState.value.enabledProviders.none { it.id == configId }) {
             // Two different problems wear the same symptom here: no key saved at all, versus a key
             // whose catalog hasn't produced a model yet. They need opposite advice.
             activeError.value = if (uiState.value.enabledProviders.isEmpty()) {
@@ -219,24 +226,15 @@ class ChatViewModel @Inject constructor(
             } else {
                 GeckoError(ErrorKind.ModelUnavailable).withProviderContext()
             }
-            return
+            return false
         }
 
-        viewModelScope.launch {
-            val providerId = resolveProviderId(configId) ?: return@launch
+        runGeneration(configId) {
+            val providerId = resolveProviderId(configId) ?: return@runGeneration flowOf(unresolvedProviderError())
             val conversationId = currentConversationId.value
                 ?: conversationRepository.createConversation(providerId, modelId).id.also { currentConversationId.value = it }
 
-            // uiState.messages is already this same reactive query's latest result for an
-            // existing, already-open conversation — reuse it instead of re-querying Room a
-            // second time (this history can carry large base64 image blobs on long chats). A
-            // brand-new conversation's id hasn't propagated through that reactive chain yet at
-            // this point, so it still needs a direct fetch (trivially cheap: empty history).
-            val history = if (uiState.value.currentConversationId == conversationId) {
-                uiState.value.messages
-            } else {
-                conversationRepository.observeMessages(conversationId).first()
-            }
+            val history = conversationRepository.observeMessages(conversationId).first()
             val userMessage = ChatMessage(
                 id = newId(),
                 conversationId = conversationId,
@@ -249,25 +247,24 @@ class ChatViewModel @Inject constructor(
             conversationRepository.saveMessage(userMessage)
             maybeAutoTitle(conversationId, history, trimmed.ifBlank { "Image attachment" })
 
-            runGeneration {
-                sendChatMessageUseCase(conversationId, configId, providerId, modelId, history + userMessage, streaming = uiState.value.streamingEnabled)
-            }
+            sendChatMessageUseCase(conversationId, configId, providerId, modelId, history + userMessage, streaming = uiState.value.streamingEnabled)
         }
+        return true
     }
 
     fun regenerate() {
         if (isGenerating.value) return
         val conversationId = currentConversationId.value ?: return
-        val configId = selectedConfigId.value ?: return
-        val modelId = selectedModelId.value ?: return
-        runGeneration {
+        val configId = selection.value?.configId ?: return
+        val modelId = selection.value?.modelId ?: return
+        runGeneration(configId) {
             val providerId = resolveProviderId(configId) ?: return@runGeneration flowOf(unresolvedProviderError())
             regenerateResponseUseCase(conversationId, configId, providerId, modelId, streaming = uiState.value.streamingEnabled)
         }
     }
 
     private suspend fun resolveProviderId(configId: String): ProviderId? =
-        providerConfigs.first().find { it.id == configId }?.providerId
+        providerConfigs.first().find { it.id == configId && it.enabled && it.hasApiKey }?.providerId
 
     private fun unresolvedProviderError() = ChatEvent.Error(GeckoError(ErrorKind.KeyRemoved))
 
@@ -290,10 +287,10 @@ class ChatViewModel @Inject constructor(
         if (trimmed.isEmpty()) return
         val messageId = editingMessageId.value ?: return
         val conversationId = currentConversationId.value ?: return
-        val configId = selectedConfigId.value ?: return
-        val modelId = selectedModelId.value ?: return
+        val configId = selection.value?.configId ?: return
+        val modelId = selection.value?.modelId ?: return
         editingMessageId.value = null
-        runGeneration {
+        runGeneration(configId) {
             val providerId = resolveProviderId(configId) ?: return@runGeneration flowOf(unresolvedProviderError())
             editAndResendMessageUseCase(conversationId, messageId, trimmed, configId, providerId, modelId, streaming = uiState.value.streamingEnabled)
         }
@@ -307,6 +304,10 @@ class ChatViewModel @Inject constructor(
 
     fun deleteConversation(conversationId: String) {
         viewModelScope.launch {
+            if (currentConversationId.value == conversationId) {
+                generationJob?.cancel()
+                generationJob?.join()
+            }
             conversationRepository.deleteConversation(conversationId)
             if (currentConversationId.value == conversationId) currentConversationId.value = null
         }
@@ -326,11 +327,8 @@ class ChatViewModel @Inject constructor(
      * second tap landed — there is no useful intermediate state to expose.
      */
     fun selectModel(configId: String, modelId: String) {
-        selectedConfigId.value = configId
-        selectedModelId.value = modelId
         viewModelScope.launch {
-            userPreferencesRepository.setDefaultProviderConfig(configId)
-            userPreferencesRepository.setDefaultModel(modelId)
+            userPreferencesRepository.setDefaultSelection(configId, modelId)
         }
     }
 
@@ -341,8 +339,8 @@ class ChatViewModel @Inject constructor(
      */
     fun loadModels(configId: String, silent: Boolean = false) {
         if (configId in loadingModelConfigIds.value) return
+        loadingModelConfigIds.update { it + configId }
         viewModelScope.launch {
-            loadingModelConfigIds.update { it + configId }
             try {
                 refreshProviderModelsUseCase(configId).onFailure { error ->
                     if (!silent) {
@@ -373,7 +371,7 @@ class ChatViewModel @Inject constructor(
      * built from, and that's exactly what the "Open key" button needs.
      */
     private fun GeckoError.withProviderContext(configId: String? = null): GeckoError {
-        val id = this.configId ?: configId ?: selectedConfigId.value
+        val id = this.configId ?: configId ?: selection.value?.configId
         val label = providerLabel ?: uiState.value.providerConfigs.find { it.id == id }?.displayLabel
         return copy(configId = id, providerLabel = label)
     }
@@ -384,20 +382,25 @@ class ChatViewModel @Inject constructor(
 
     private val ProviderConfig.displayLabel: String get() = label.ifBlank { providerId.displayName }
 
-    private fun runGeneration(flowProvider: suspend () -> Flow<ChatEvent>) {
-        generationJob?.cancel()
+    private fun runGeneration(configId: String, flowProvider: suspend () -> Flow<ChatEvent>) {
+        if (isGenerating.value) return
+        isGenerating.value = true
         generationJob = viewModelScope.launch {
-            isGenerating.value = true
             try {
                 flowProvider().collect { event ->
                     if (event is ChatEvent.Error && event.error.deservesInterrupting) {
-                        activeError.value = event.error.withProviderContext()
+                        activeError.value = event.error.withProviderContext(configId)
                     }
                 }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                activeError.value = error.asGeckoError(configId)
             } finally {
                 isGenerating.value = false
             }
         }
+        generationJob?.invokeOnCompletion { isGenerating.value = false }
     }
 
     private suspend fun maybeAutoTitle(conversationId: String, priorHistory: List<ChatMessage>, firstUserText: String) {

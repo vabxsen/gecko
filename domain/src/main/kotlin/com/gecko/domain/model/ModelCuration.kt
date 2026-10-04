@@ -111,7 +111,6 @@ fun List<ModelInfo>.curatedForSelection(
  */
 private fun List<ModelInfo>.rankedFallback(): List<ModelInfo> {
     val chatModels = filterNot { NON_CHAT_MODEL_KEYWORD.containsMatchIn(it.modelId) }
-        .ifEmpty { this }
     // Only drop previews when enough settled models remain to fill the list — a catalog made
     // entirely of preview builds should still show something.
     val settled = chatModels.filterNot { PROVISIONAL_MODEL.containsMatchIn(it.modelId) }
@@ -119,6 +118,17 @@ private fun List<ModelInfo>.rankedFallback(): List<ModelInfo> {
     return candidates.sortedWith(
         compareByDescending<ModelInfo> { it.usefulnessScore() }.thenByDescending { it.modelId },
     )
+}
+
+/** A bounded setup shortlist that also reaches lighter models outside the visible picker. */
+fun List<ModelInfo>.connectionCandidates(providerId: ProviderId, baseUrlOverride: String?): List<ModelInfo> {
+    val ranked = rankedFallback()
+    val curated = curatedForSelection(providerId, baseUrlOverride)
+    val free = if (providerId == ProviderId.OPENROUTER) {
+        ranked.filter { it.modelId == "openrouter/free" || it.modelId.endsWith(":free") }
+    } else emptyList()
+    return (free.take(2) + listOfNotNull(curated.defaultChoice) + ranked.filter { it.trait == ModelTrait.Fast } +
+        curated.primary + ranked).distinctBy { it.modelId }.take(5)
 }
 
 /**

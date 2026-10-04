@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -24,6 +25,7 @@ import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -48,12 +50,13 @@ import com.gecko.feature.chat.component.ModelSelectorChip
 import kotlinx.coroutines.launch
 
 /** Screens at least this wide get a permanent side rail instead of a swipe-away drawer. */
-private const val WIDE_SCREEN_BREAKPOINT_DP = 600
+private const val WIDE_SCREEN_BREAKPOINT_DP = 840
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
     onOpenSettings: () -> Unit,
+    onConnectProvider: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: ChatViewModel = hiltViewModel(),
 ) {
@@ -113,7 +116,8 @@ fun ChatScreen(
                 showMenuButton = false,
                 onOpenDrawer = {},
                 onOpenSettings = onOpenSettings,
-                modifier = Modifier.fillMaxHeight(),
+                onConnectProvider = onConnectProvider,
+                modifier = Modifier.weight(1f).fillMaxHeight(),
             )
         }
     } else {
@@ -160,6 +164,7 @@ fun ChatScreen(
                 showMenuButton = true,
                 onOpenDrawer = { scope.launch { drawerState.open() } },
                 onOpenSettings = onOpenSettings,
+                onConnectProvider = onConnectProvider,
             )
         }
     }
@@ -176,6 +181,7 @@ private fun ChatContent(
     showMenuButton: Boolean,
     onOpenDrawer: () -> Unit,
     onOpenSettings: () -> Unit,
+    onConnectProvider: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // 32dp of bottom margin is for comfortable thumb reach above the gesture/nav bar when the
@@ -208,25 +214,30 @@ private fun ChatContent(
                 showMenuButton = showMenuButton,
                 onOpenDrawer = onOpenDrawer,
                 modelSelector = {
-                    ModelSelectorChip(
-                        selectedProvider = uiState.selectedProvider,
-                        selectedModelLabel = uiState.selectedModelLabel,
-                        onClick = onShowModelPicker,
-                    )
+                    if (uiState.enabledProviders.isNotEmpty()) {
+                        ModelSelectorChip(
+                            selectedProvider = uiState.selectedProvider,
+                            selectedModelLabel = uiState.selectedModelLabel,
+                            onClick = onShowModelPicker,
+                        )
+                    }
                 },
             )
         },
         bottomBar = {
-            MessageComposer(
-                isGenerating = uiState.isGenerating,
-                sendOnEnter = uiState.sendOnEnter,
-                onSend = viewModel::sendMessage,
-                onStop = viewModel::stopGeneration,
-                modifier = Modifier
-                    .imePadding()
-                    .padding(horizontal = 12.dp)
-                    .padding(top = 8.dp, bottom = composerBottomPadding),
-            )
+            if (uiState.enabledProviders.isNotEmpty()) {
+                MessageComposer(
+                    isGenerating = uiState.isGenerating,
+                    sendOnEnter = uiState.sendOnEnter,
+                    onSend = viewModel::sendMessage,
+                    onStop = viewModel::stopGeneration,
+                    modifier = Modifier
+                        .navigationBarsPadding()
+                        .imePadding()
+                        .padding(horizontal = 12.dp)
+                        .padding(top = 8.dp, bottom = composerBottomPadding),
+                )
+            }
         },
     ) { innerPadding ->
         Crossfade(
@@ -235,18 +246,24 @@ private fun ChatContent(
             label = "chatContentCrossfade",
         ) { isEmpty ->
             if (isEmpty) {
-                EmptyChatState(modifier = Modifier.padding(innerPadding))
-            } else {
-                MessageList(
-                    messages = uiState.messages,
-                    editingMessageId = uiState.editingMessageId,
-                    onBeginEdit = viewModel::beginEdit,
-                    onSubmitEdit = viewModel::submitEdit,
-                    onCancelEdit = viewModel::cancelEdit,
-                    onRegenerate = viewModel::regenerate,
-                    onShowError = viewModel::showError,
+                EmptyChatState(
+                    needsConnection = uiState.enabledProviders.isEmpty(),
+                    onConnect = onConnectProvider,
                     modifier = Modifier.padding(innerPadding),
                 )
+            } else {
+                key(uiState.currentConversationId) {
+                    MessageList(
+                        messages = uiState.messages,
+                        editingMessageId = uiState.editingMessageId,
+                        onBeginEdit = viewModel::beginEdit,
+                        onSubmitEdit = viewModel::submitEdit,
+                        onCancelEdit = viewModel::cancelEdit,
+                        onRegenerate = viewModel::regenerate,
+                        onShowError = viewModel::showError,
+                        modifier = Modifier.padding(innerPadding),
+                    )
+                }
             }
         }
     }

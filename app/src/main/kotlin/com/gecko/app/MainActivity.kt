@@ -30,6 +30,7 @@ import com.gecko.core.model.preferences.ThemeMode
 import com.gecko.feature.chat.ChatScreen
 import com.gecko.feature.chat.navigation.ChatRoute
 import com.gecko.feature.settings.navigation.SettingsRoute
+import com.gecko.feature.settings.navigation.AddProviderRoute
 import com.gecko.feature.settings.navigation.settingsGraph
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -96,8 +97,11 @@ private fun GeckoNavHost() {
         },
     ) {
         composable<ChatRoute> {
-            ChatScreen(onOpenSettings = { navController.navigate(SettingsRoute) })
+            ChatScreen(
+                onOpenSettings = { navController.navigate(SettingsRoute) },
+                onConnectProvider = { navController.navigate(AddProviderRoute) },
+            )
         }
-        settingsGraph(navController)
+        settingsGraph(navController, onConnected = { navController.popBackStack<ChatRoute>(inclusive = false) })
     }
 }

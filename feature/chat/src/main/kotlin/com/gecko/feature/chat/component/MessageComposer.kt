@@ -70,7 +70,7 @@ import kotlinx.coroutines.launch
 fun MessageComposer(
     isGenerating: Boolean,
     sendOnEnter: Boolean,
-    onSend: (text: String, attachmentBase64: String?) -> Unit,
+    onSend: (text: String, attachmentBase64: String?) -> Boolean,
     onStop: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -85,8 +85,11 @@ fun MessageComposer(
         if (uri != null) {
             isEncodingAttachment = true
             scope.launch {
-                attachmentBase64 = encodeImageAttachment(context, uri)
-                isEncodingAttachment = false
+                try {
+                    attachmentBase64 = encodeImageAttachment(context, uri)
+                } finally {
+                    isEncodingAttachment = false
+                }
             }
         }
     }
@@ -154,10 +157,12 @@ fun MessageComposer(
     }
 
     fun send() {
+        if (isGenerating || isEncodingAttachment) return
         if (text.isBlank() && attachmentBase64 == null) return
-        onSend(text, attachmentBase64)
-        text = ""
-        attachmentBase64 = null
+        if (onSend(text, attachmentBase64)) {
+            text = ""
+            attachmentBase64 = null
+        }
     }
 
     Surface(
@@ -179,7 +184,7 @@ fun MessageComposer(
                 Box(
                     modifier = Modifier
                         .padding(start = 2.dp)
-                        .size(38.dp)
+                        .size(48.dp)
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.primary, CircleShape)
                         .clickable(enabled = !isEncodingAttachment) {
@@ -205,9 +210,7 @@ fun MessageComposer(
                 TextField(
                     value = text,
                     onValueChange = { text = it },
-                    modifier = Modifier
-                        .weight(1f)
-                        .offset(x = (-10).dp),
+                    modifier = Modifier.weight(1f),
                     placeholder = { Text("What's up…") },
                     maxLines = 6,
                     keyboardOptions = KeyboardOptions(imeAction = if (sendOnEnter) ImeAction.Send else ImeAction.Default),
@@ -228,7 +231,7 @@ fun MessageComposer(
                         onClick = onStop,
                     )
                 } else {
-                    IconButton(onClick = ::onMicClick) {
+                    IconButton(onClick = ::onMicClick, enabled = speechRecognizer != null) {
                         Icon(
                             imageVector = if (isListening) Icons.Filled.FilledMic else Icons.Outlined.Mic,
                             contentDescription = if (isListening) "Stop voice input" else "Voice input",
@@ -239,7 +242,7 @@ fun MessageComposer(
                             },
                         )
                     }
-                    val canSend = text.isNotBlank() || attachmentBase64 != null
+                    val canSend = !isEncodingAttachment && (text.isNotBlank() || attachmentBase64 != null)
                     ComposerActionButton(
                         icon = Icons.Filled.ArrowUpward,
                         contentDescription = "Send message",
@@ -281,7 +284,7 @@ private fun ComposerActionButton(
     Box(
         modifier = Modifier
             .padding(end = 2.dp)
-            .size(38.dp)
+            .size(48.dp)
             .clip(CircleShape)
             .background(containerColor, CircleShape)
             .clickable(enabled = enabled, onClick = onClick),

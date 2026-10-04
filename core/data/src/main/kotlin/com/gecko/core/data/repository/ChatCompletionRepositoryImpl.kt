@@ -48,26 +48,24 @@ class ChatCompletionRepositoryImpl @Inject constructor(
      * ones that don't — NVIDIA NIM serves `/v1/models` to anyone, so a fake key used to be saved
      * and shown as "Connected" until the user's first message failed.
      *
-     * Only an authentication failure on the probe fails the test. A rate limit or a quota error
-     * means the key is genuinely valid and something else is wrong, and refusing to save a working
-     * key over a temporary 429 would be its own bug.
+     * Every probe failure is reported accurately. The add-key screen decides whether a failure
+     * requires correcting the key or whether to keep it for a later retry.
      */
     override suspend fun testConnection(configId: String): Result<Unit> {
         val config = providerConfigRepository.observe(configId).first()
             ?: return Result.failure(GeckoException(GeckoError(ErrorKind.KeyRemoved, configId = configId)))
-        val apiKey = secureKeyRepository.getApiKey(configId)
+        val apiKey = secureKeyRepository.getApiKey(configId)?.takeIf { it.isNotBlank() }
             ?: return Result.failure(GeckoException(config.missingKeyError(configId)))
         val provider = providerFactory.create(config.providerId, apiKey, config.baseUrlOverride)
 
         val models = provider.listModels().getOrElse { return Result.failure(it) }
         val probeModel = models.curatedForSelection(config.providerId, config.baseUrlOverride)
             .defaultChoice?.modelId
-            ?: models.firstOrNull()?.modelId
-            ?: return Result.success(Unit)
+            ?: return Result.failure(GeckoException(GeckoError(ErrorKind.ModelUnavailable, configId = configId)))
 
         val failure = provider.probeChat(probeModel)
-        return if (failure != null && failure.error.kind == ErrorKind.InvalidApiKey) {
-            Result.failure(GeckoException(failure.error))
+        return if (failure != null) {
+            Result.failure(GeckoException(failure.error.copy(configId = configId, providerLabel = config.displayLabel)))
         } else {
             Result.success(Unit)
         }

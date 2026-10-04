@@ -92,8 +92,7 @@ class ModelSelectionViewModel @Inject constructor(
     /** Picking a model also makes its key the one in use — one decision, not two. */
     fun selectModel(modelId: String) {
         viewModelScope.launch {
-            userPreferencesRepository.setDefaultProviderConfig(configId)
-            userPreferencesRepository.setDefaultModel(modelId)
+            userPreferencesRepository.setDefaultSelection(configId, modelId)
         }
     }
 

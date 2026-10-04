@@ -8,6 +8,8 @@ import com.gecko.core.model.provider.ConnectionStatus
 import com.gecko.core.model.provider.ModelInfo
 import com.gecko.core.model.provider.ProviderConfig
 import com.gecko.core.model.provider.ProviderId
+import com.gecko.core.model.error.GeckoException
+import com.gecko.domain.error.copyForUser
 import com.gecko.domain.repository.ProviderConfigRepository
 import com.gecko.core.model.preferences.UserPreferences
 import com.gecko.domain.repository.SecureKeyRepository
@@ -24,6 +26,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
 
 data class ProviderDetailUiState(
     val id: String,
@@ -36,6 +39,7 @@ data class ProviderDetailUiState(
     val saveKeyErrorMessage: String? = null,
     /** The app-wide model, shown here only when this is the key it belongs to. */
     val selectedModelId: String? = null,
+    val isLoading: Boolean = true,
 ) {
     val providerId: ProviderId? get() = config?.providerId
     val label: String get() = config?.label.orEmpty()
@@ -63,7 +67,8 @@ class ProviderDetailViewModel @Inject constructor(
     private val refreshProviderModelsUseCase: RefreshProviderModelsUseCase,
 ) : ViewModel() {
 
-    private val id: String = savedStateHandle.toRoute<ProviderDetailRoute>().configId
+    private val id: String = savedStateHandle.get<String>("configId")
+        ?: savedStateHandle.toRoute<ProviderDetailRoute>().configId
 
     private val isLoadingModels = MutableStateFlow(false)
     private val isSavingKey = MutableStateFlow(false)
@@ -103,6 +108,7 @@ class ProviderDetailViewModel @Inject constructor(
             // nothing outside this screen ever looked at.
             selectedModelId = keyState.prefs.defaultModelId
                 .takeIf { keyState.prefs.defaultProviderConfigId == id },
+            isLoading = false,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProviderDetailUiState(id = id))
 
@@ -118,26 +124,27 @@ class ProviderDetailViewModel @Inject constructor(
 
     fun saveApiKey(key: String) {
         val trimmed = key.trim()
-        if (trimmed.isEmpty()) return
+        if (trimmed.isEmpty() || isSavingKey.value) return
+        isSavingKey.value = true
+        saveKeyErrorMessage.value = null
         viewModelScope.launch {
-            isSavingKey.value = true
-            saveKeyErrorMessage.value = null
-            val result = runCatching { saveProviderApiKeyUseCase(id, trimmed) }
-            if (result.isFailure) {
+            try {
+                saveProviderApiKeyUseCase(id, trimmed)
+                apiKeyValue.value = trimmed
+                testProviderConnectionUseCase(id)
+                refreshProviderModelsUseCase(id)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                saveKeyErrorMessage.value = "Couldn't save or check this key. Please try again."
+            } finally {
                 isSavingKey.value = false
-                saveKeyErrorMessage.value = "Couldn't securely store this key on this device."
-                return@launch
             }
-            apiKeyValue.value = trimmed
-            isSavingKey.value = false
-            // Result surfaces reactively as ConnectionStatus on uiState.connectionStatus, same as
-            // the manual "test connection" action — no separate error state needed here.
-            testProviderConnectionUseCase(id)
-            refreshProviderModelsUseCase(id)
         }
     }
 
     fun clearApiKey() {
+        if (isSavingKey.value) return
         viewModelScope.launch {
             secureKeyRepository.clearApiKey(id)
             providerConfigRepository.setConnectionStatus(id, ConnectionStatus.Untested)
@@ -146,19 +153,33 @@ class ProviderDetailViewModel @Inject constructor(
     }
 
     fun testConnection() {
+        if (isSavingKey.value || uiState.value.connectionStatus == ConnectionStatus.Testing) return
         viewModelScope.launch { testProviderConnectionUseCase(id) }
     }
 
     fun refreshModels() {
+        if (isLoadingModels.value) return
+        isLoadingModels.value = true
         viewModelScope.launch {
-            isLoadingModels.value = true
-            refreshProviderModelsUseCase(id)
-            isLoadingModels.value = false
+            try {
+                refreshProviderModelsUseCase(id).onFailure { error ->
+                    saveKeyErrorMessage.value = (error as? GeckoException)?.error?.copyForUser()?.explanation
+                        ?: "Couldn't load models. Please try again."
+                }
+            } finally {
+                isLoadingModels.value = false
+            }
         }
     }
 
     fun setBaseUrlOverride(url: String?) {
-        viewModelScope.launch { providerConfigRepository.setBaseUrlOverride(id, url?.trim()?.ifBlank { null }) }
+        if (isSavingKey.value) return
+        viewModelScope.launch {
+            providerConfigRepository.setBaseUrlOverride(id, url?.trim()?.trimEnd('/')?.ifBlank { null })
+            providerConfigRepository.saveModels(id, emptyList())
+            providerConfigRepository.setConnectionStatus(id, ConnectionStatus.Untested)
+            refreshModels()
+        }
     }
 
     fun deleteProvider(onDeleted: () -> Unit) {

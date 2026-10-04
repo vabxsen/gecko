@@ -26,6 +26,8 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import org.junit.Rule
 import org.junit.Test
 
@@ -33,7 +35,7 @@ import org.junit.Test
 class ChatViewModelTest {
 
     @get:Rule
-    val mainDispatcherRule = MainDispatcherRule()
+    val mainDispatcherRule = MainDispatcherRule(kotlinx.coroutines.test.StandardTestDispatcher())
 
     private suspend fun buildViewModel(
         conversationRepository: FakeConversationRepository = FakeConversationRepository(),
@@ -43,7 +45,9 @@ class ChatViewModelTest {
         defaultModelId: String? = "gpt-4o",
     ): ChatViewModel {
         val defaultConfigId = defaultProviderId?.let {
-            providerConfigRepository.addProvider(it, it.displayName).getOrThrow()
+            providerConfigRepository.addProvider(it, it.displayName).getOrThrow().also { id ->
+                providerConfigRepository.setHasApiKey(id, true)
+            }
         }
         val userPreferencesRepository = FakeUserPreferencesRepository(
             UserPreferences(defaultProviderConfigId = defaultConfigId, defaultModelId = defaultModelId),
@@ -63,6 +67,88 @@ class ChatViewModelTest {
             ),
             refreshProviderModelsUseCase = RefreshProviderModelsUseCase(chatCompletionRepository, providerConfigRepository),
         )
+    }
+
+    @Test
+    fun stoppingBeforeGenerationStartsDoesNotLeaveChatBusy() = runTest {
+        val viewModel = buildViewModel()
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        advanceUntilIdle()
+
+        viewModel.sendMessage("Hello")
+        viewModel.stopGeneration()
+        advanceUntilIdle()
+
+        assertFalse(viewModel.uiState.value.isGenerating)
+        assertTrue(viewModel.sendMessage("Try again"))
+        advanceUntilIdle()
+    }
+
+    @Test
+    fun rapidSendTapsAcceptOnlyOneMessage() = runTest {
+        val conversations = FakeConversationRepository()
+        val viewModel = buildViewModel(conversationRepository = conversations)
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        advanceUntilIdle()
+
+        assertTrue(viewModel.sendMessage("First"))
+        assertFalse(viewModel.sendMessage("Duplicate"))
+        advanceUntilIdle()
+
+        assertEquals(1, viewModel.uiState.value.conversations.size)
+        assertEquals(listOf("First", "Hi"), viewModel.uiState.value.messages.map { it.content })
+    }
+
+    @Test
+    fun sendingImmediatelyAfterSwitchingChatsUsesTheCorrectHistory() = runTest {
+        val conversations = FakeConversationRepository()
+        val completions = FakeChatCompletionRepository()
+        val viewModel = buildViewModel(conversationRepository = conversations, chatCompletionRepository = completions)
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        advanceUntilIdle()
+        viewModel.sendMessage("First conversation")
+        advanceUntilIdle()
+        val firstId = viewModel.uiState.value.currentConversationId!!
+        viewModel.startNewConversation()
+        viewModel.sendMessage("Second conversation")
+        advanceUntilIdle()
+
+        viewModel.selectConversation(firstId)
+        viewModel.sendMessage("Follow up")
+        advanceUntilIdle()
+
+        assertEquals(listOf("First conversation", "Hi", "Follow up"), completions.lastRequest!!.third.map { it.content })
+        assertTrue(completions.lastRequest!!.third.all { it.conversationId == firstId })
+    }
+
+    @Test
+    fun unexpectedGenerationFailureIsShownAndDoesNotLeaveChatBusy() = runTest {
+        val completions = FakeChatCompletionRepository(flowBuilder = { flow { throw IllegalStateException("Failed") } })
+        val viewModel = buildViewModel(chatCompletionRepository = completions)
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        advanceUntilIdle()
+
+        viewModel.sendMessage("Hello")
+        advanceUntilIdle()
+
+        assertFalse(viewModel.uiState.value.isGenerating)
+        assertEquals(ErrorKind.Unknown, viewModel.uiState.value.error?.kind)
+    }
+
+    @Test
+    fun disablingTheSelectedKeyAdoptsAnotherUsableKey() = runTest {
+        val providers = FakeProviderConfigRepository()
+        val first = providers.addGoogleKeyWith("gemini-pro-latest")
+        val second = providers.addGoogleKeyWith("gemini-pro-latest")
+        val viewModel = buildViewModel(providerConfigRepository = providers, defaultProviderId = null)
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        advanceUntilIdle()
+        assertEquals(first, viewModel.uiState.value.selectedConfigId)
+
+        providers.setEnabled(first, false)
+        advanceUntilIdle()
+
+        assertEquals(second, viewModel.uiState.value.selectedConfigId)
     }
 
     @Test
@@ -152,6 +238,7 @@ class ChatViewModelTest {
         assertEquals("boom", viewModel.uiState.value.error?.technicalDetail)
 
         viewModel.dismissError()
+        runCurrent()
         assertNull(viewModel.uiState.value.error)
     }
 
@@ -354,6 +441,7 @@ class ChatViewModelTest {
             while (state.enabledProviders.isEmpty()) state = awaitItem()
             assertEquals(1, state.enabledProviders.size)
             assertEquals(ProviderId.OPENAI, state.enabledProviders.first().providerId)
+            cancelAndIgnoreRemainingEvents()
         }
     }
 }
