@@ -20,6 +20,27 @@ class ConnectProviderUseCaseTest {
     private val fast = ModelInfo(ProviderId.OPENAI, "gpt-4o-mini", "Fast", 128_000, true, true)
     private val alternative = fast.copy(modelId = "gpt-4o")
 
+    @Test fun openRouterFreeRouterIsTriedBeforeIndividualFreeModels() {
+        val models = (1..10).map { fast.copy(providerId = ProviderId.OPENROUTER, modelId = "vendor/model-$it:free") } +
+            fast.copy(providerId = ProviderId.OPENROUTER, modelId = "openrouter/free")
+        assertEquals("openrouter/free", models.connectionCandidates(ProviderId.OPENROUTER, null).first().modelId)
+    }
+
+    @Test fun openRouterCanRecoverFromAModelRateLimitOrOutage() = runTest {
+        for (kind in listOf(ErrorKind.RateLimited, ErrorKind.ProviderOutage)) {
+            val providers = FakeProviderConfigRepository()
+            val prefs = FakeUserPreferencesRepository()
+            val id = providers.addProvider(ProviderId.OPENROUTER, "OpenRouter").getOrThrow()
+            val router = fast.copy(providerId = ProviderId.OPENROUTER, modelId = "openrouter/free")
+            val backup = router.copy(modelId = "vendor/backup:free")
+            val chat = Chat(listOf(router, backup), mapOf(router.modelId to kind))
+            val result = ConnectProviderUseCase(chat, providers, prefs)(id).getOrThrow()
+            assertEquals(backup.modelId, result.modelId)
+            assertEquals(listOf(router.modelId, backup.modelId), chat.requested)
+            assertEquals(backup.modelId, providers.currentConfig(id)?.verifiedModelId)
+        }
+    }
+
     @Test fun automaticCandidatesPreferFreeOpenRouterOptionsAndRemainBounded() {
         val models = (1..20).map { fast.copy(providerId = ProviderId.OPENROUTER, modelId = "vendor/model-$it:free") }
         val candidates = (listOf(fast.copy(providerId = ProviderId.OPENROUTER)) + models)

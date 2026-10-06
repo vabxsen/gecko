@@ -76,6 +76,7 @@ internal class OpenAiChatEngine(
                         chunk.error?.throwAsProviderFailure()
 
                         chunk.choices.firstOrNull()?.let { choice ->
+                            checkChoiceFailure(choice.error, choice.finishReason)
                             choice.delta.content?.let { text ->
                                 if (text.isNotEmpty()) {
                                     contentReceived = true
@@ -111,6 +112,7 @@ internal class OpenAiChatEngine(
             val parsed = ProviderJson.decodeFromString(OpenAiChatResponse.serializer(), bodyText)
             parsed.error?.throwAsProviderFailure()
             val choice = parsed.choices.firstOrNull() ?: throw EmptyProviderResponseException()
+            checkChoiceFailure(choice.error, choice.finishReason)
             val text = choice.message.content?.takeIf { it.isNotEmpty() }
                 ?: choice.message.reasoningContent?.takeIf { it.isNotEmpty() }
                 ?: throw EmptyProviderResponseException()
@@ -150,6 +152,14 @@ private fun ChatMessage.toOpenAiMessage(): OpenAiMessage {
         )
     }
     return OpenAiMessage(role = role.toWireRole(), content = requestContent)
+}
+
+/** OpenRouter may report an upstream failure on the choice even when HTTP succeeded. */
+private fun checkChoiceFailure(error: OpenAiErrorDetail?, finishReason: String?) {
+    error?.throwAsProviderFailure()
+    if (finishReason == "error") {
+        throw ProviderReportedException(null, "The provider could not finish the reply. Please try again.")
+    }
 }
 
 private fun String.toFinishReason(): FinishReason = when (this) {

@@ -9,6 +9,7 @@ import com.gecko.core.model.error.GeckoError
 import com.gecko.core.model.error.GeckoException
 import com.gecko.core.model.provider.ConnectionStatus
 import com.gecko.core.model.provider.ModelInfo
+import com.gecko.core.model.provider.ProviderId
 import com.gecko.domain.model.connectionCandidates
 import com.gecko.domain.repository.ChatCompletionRepository
 import com.gecko.domain.repository.ProviderConfigRepository
@@ -63,7 +64,11 @@ class ConnectProviderUseCase @Inject constructor(
                     continue
                 }
                 lastError = (terminal as? ChatEvent.Error)?.error ?: GeckoError(ErrorKind.EmptyResponse)
-                if (lastError.kind !in MODEL_SPECIFIC_FAILURES) break
+                // OpenRouter spans multiple upstream providers; one model's exhausted capacity
+                // should not reject a valid key. The same five-model / 90-second bounds apply.
+                val canTryAnotherUpstream = config.providerId == ProviderId.OPENROUTER &&
+                    lastError.kind in setOf(ErrorKind.RateLimited, ErrorKind.ProviderOutage)
+                if (lastError.kind !in MODEL_SPECIFIC_FAILURES && !canTryAnotherUpstream) break
             }
             throw GeckoException(lastError)
         }

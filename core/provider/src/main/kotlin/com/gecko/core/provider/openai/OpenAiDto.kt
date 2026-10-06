@@ -69,6 +69,7 @@ internal data class OpenAiDelta(
 internal data class OpenAiStreamChoice(
     val delta: OpenAiDelta = OpenAiDelta(),
     @SerialName("finish_reason") val finishReason: String? = null,
+    val error: OpenAiErrorDetail? = null,
 )
 
 /**
@@ -88,6 +89,7 @@ internal data class OpenAiStreamChunk(
 internal data class OpenAiChoice(
     val message: OpenAiResponseMessage = OpenAiResponseMessage(),
     @SerialName("finish_reason") val finishReason: String? = null,
+    val error: OpenAiErrorDetail? = null,
 )
 
 @Serializable

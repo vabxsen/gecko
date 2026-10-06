@@ -126,6 +126,7 @@ fun List<ModelInfo>.connectionCandidates(providerId: ProviderId, baseUrlOverride
     val curated = curatedForSelection(providerId, baseUrlOverride)
     val free = if (providerId == ProviderId.OPENROUTER) {
         ranked.filter { it.modelId == "openrouter/free" || it.modelId.endsWith(":free") }
+            .sortedByDescending { it.modelId == "openrouter/free" }
     } else emptyList()
     return (free.take(2) + listOfNotNull(curated.defaultChoice) + ranked.filter { it.trait == ModelTrait.Fast } +
         curated.primary + ranked).distinctBy { it.modelId }.take(5)

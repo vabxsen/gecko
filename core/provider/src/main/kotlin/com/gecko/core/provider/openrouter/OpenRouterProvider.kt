@@ -56,14 +56,14 @@ class OpenRouterProvider(
         }
 
         val parsed = ProviderJson.decodeFromString(OpenRouterModelsResponse.serializer(), bodyText)
-        parsed.data.map { model ->
+        parsed.data.filter { "text" in it.architecture.inputs && "text" in it.architecture.outputs }.map { model ->
             ModelInfo(
                 providerId = ProviderId.OPENROUTER,
                 modelId = model.id,
                 displayName = model.name,
                 contextWindowTokens = model.contextLength,
                 supportsStreaming = true,
-                supportsImages = model.architecture.modality.contains("image"),
+                supportsImages = "image" in model.architecture.inputs,
             )
         }
     }
