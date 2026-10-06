@@ -12,7 +12,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
-import com.gecko.core.designsystem.icon.GeckoLogoMark
+import com.gecko.core.designsystem.icon.geckoLogoPainter
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -154,7 +154,7 @@ private fun AssistantMessage(
         Row(Modifier.padding(bottom = 12.dp), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.primary) {
-                Icon(GeckoLogoMark, null, Modifier.size(28.dp), tint = MaterialTheme.colorScheme.onPrimary)
+                Icon(geckoLogoPainter(), null, Modifier.size(28.dp), tint = MaterialTheme.colorScheme.onPrimary)
             }
             Text("Gecko", style = MaterialTheme.typography.titleSmall)
         }

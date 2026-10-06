@@ -14,7 +14,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.gecko.core.designsystem.icon.GeckoLogoMark
+import com.gecko.core.designsystem.icon.geckoLogoPainter
 
 @Composable
 fun GeckoPageIntro(title: String, description: String, modifier: Modifier = Modifier) {
@@ -29,6 +29,6 @@ fun GeckoBrandTile(modifier: Modifier = Modifier, size: Dp = 72.dp) {
     Surface(modifier.size(size), shape = MaterialTheme.shapes.large,
         shadowElevation = 2.dp,
         color = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary) {
-        Icon(GeckoLogoMark, contentDescription = null, modifier = Modifier.padding(4.dp))
+        Icon(geckoLogoPainter(), contentDescription = null, modifier = Modifier.padding(4.dp))
     }
 }
