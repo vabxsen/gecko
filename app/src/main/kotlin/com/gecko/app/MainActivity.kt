@@ -6,6 +6,13 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
+import com.gecko.core.designsystem.theme.LocalGeckoMotionEnabled
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -73,21 +80,27 @@ private fun GeckoApp(appViewModel: GeckoAppViewModel = hiltViewModel()) {
 @Composable
 private fun GeckoNavHost() {
     val navController = rememberNavController()
+    val motion = LocalGeckoMotionEnabled.current
+    val travel = with(LocalDensity.current) { 18.dp.roundToPx() }
     NavHost(
         navController = navController,
         startDestination = ChatRoute,
         modifier = Modifier,
         enterTransition = {
-                fadeIn(tween(GeckoMotion.DURATION_STANDARD, easing = GeckoMotion.EasingIncoming))
+                if (motion) fadeIn(tween(GeckoMotion.DURATION_STANDARD)) +
+                    slideInVertically(tween(GeckoMotion.DURATION_STANDARD, easing = GeckoMotion.EasingEmphasized)) { travel }
+                else EnterTransition.None
         },
         exitTransition = {
-                fadeOut(tween(GeckoMotion.DURATION_QUICK, easing = GeckoMotion.EasingOutgoing))
+                if (motion) fadeOut(tween(GeckoMotion.DURATION_QUICK)) else ExitTransition.None
         },
         popEnterTransition = {
-                fadeIn(tween(GeckoMotion.DURATION_STANDARD, easing = GeckoMotion.EasingIncoming))
+                if (motion) fadeIn(tween(GeckoMotion.DURATION_STANDARD)) else EnterTransition.None
         },
         popExitTransition = {
-                fadeOut(tween(GeckoMotion.DURATION_QUICK, easing = GeckoMotion.EasingOutgoing))
+                if (motion) fadeOut(tween(GeckoMotion.DURATION_QUICK)) +
+                    slideOutVertically(tween(GeckoMotion.DURATION_STANDARD, easing = GeckoMotion.EasingOutgoing)) { travel }
+                else ExitTransition.None
         },
     ) {
         composable<ChatRoute> {

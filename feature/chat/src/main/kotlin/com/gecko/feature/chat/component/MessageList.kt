@@ -14,6 +14,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.animation.core.tween
+import com.gecko.core.designsystem.theme.GeckoMotion
+import com.gecko.core.designsystem.theme.LocalGeckoMotionEnabled
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -39,6 +42,7 @@ fun MessageList(
     isGenerating: Boolean = false,
 ) {
     val listState = rememberLazyListState()
+    val motion = LocalGeckoMotionEnabled.current
     val scope = rememberCoroutineScope()
     val lastAssistantId = remember(messages) { messages.lastOrNull { it.role == MessageRole.ASSISTANT }?.id }
 
@@ -91,9 +95,11 @@ fun MessageList(
                     onRegenerate = onRegenerate,
                     onShowError = onShowError,
                     actionsEnabled = !isGenerating,
-                    // Deliberately no animateItem(): it animates every size change, so a bubble
-                    // growing a word at a time spends the whole reply chasing its own last frame.
-                    // Messages are only appended here, never reordered, so it earns nothing.
+                    // Fade new items only. Placement/size animation would fight a growing stream.
+                    modifier = if (motion) Modifier.animateItem(
+                        fadeInSpec = tween(GeckoMotion.DURATION_STANDARD),
+                        placementSpec = null, fadeOutSpec = null,
+                    ) else Modifier,
                 )
             }
         }

@@ -1,5 +1,7 @@
 package com.gecko.feature.settings.privacy
 
+import com.gecko.core.designsystem.theme.geckoPopIn
+import com.gecko.core.designsystem.component.GeckoTextButton
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -15,7 +17,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
@@ -118,32 +119,32 @@ fun DataPrivacyScreen(
     }
 
     if (showDeleteConversationsDialog) {
-        AlertDialog(
+        AlertDialog(modifier = Modifier.geckoPopIn(),
             onDismissRequest = { showDeleteConversationsDialog = false },
             title = { Text("Delete all conversations?") },
             text = { Text("This permanently deletes every conversation on this device. This can't be undone.") },
             confirmButton = {
-                TextButton(onClick = {
+                GeckoTextButton(onClick = {
                     viewModel.deleteAllConversations()
                     showDeleteConversationsDialog = false
                 }) { Text("Delete") }
             },
-            dismissButton = { TextButton(onClick = { showDeleteConversationsDialog = false }) { Text("Cancel") } },
+            dismissButton = { GeckoTextButton(onClick = { showDeleteConversationsDialog = false }) { Text("Cancel") } },
         )
     }
 
     if (showClearAllDialog) {
-        AlertDialog(
+        AlertDialog(modifier = Modifier.geckoPopIn(),
             onDismissRequest = { showClearAllDialog = false },
             title = { Text("Clear local data?") },
             text = { Text("This permanently deletes every conversation, API key, and preference on this device. This can't be undone.") },
             confirmButton = {
-                TextButton(onClick = {
+                GeckoTextButton(onClick = {
                     viewModel.clearAllLocalData()
                     showClearAllDialog = false
                 }) { Text("Clear everything") }
             },
-            dismissButton = { TextButton(onClick = { showClearAllDialog = false }) { Text("Cancel") } },
+            dismissButton = { GeckoTextButton(onClick = { showClearAllDialog = false }) { Text("Cancel") } },
         )
     }
 }

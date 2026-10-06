@@ -14,6 +14,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import com.gecko.core.designsystem.theme.geckoPress
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
@@ -34,6 +37,7 @@ fun ModelSelectorChip(
     enabled: Boolean = true,
     connecting: Boolean = false,
 ) {
+    val press = remember { MutableInteractionSource() }
     val hasSelection = selectedProvider != null && selectedModelLabel != null
     val connectionName = selectedProvider?.label?.ifBlank { selectedProvider.providerId.displayName }
     val title = when {
@@ -45,8 +49,9 @@ fun ModelSelectorChip(
 
     Surface(
         onClick = onClick,
+        interactionSource = press,
         enabled = enabled && !connecting,
-        shape = MaterialTheme.shapes.medium,
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(50),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         color = if (hasSelection) {
             MaterialTheme.colorScheme.surface
@@ -54,6 +59,7 @@ fun ModelSelectorChip(
             MaterialTheme.colorScheme.primaryContainer
         },
         modifier = modifier
+            .geckoPress(press, enabled && !connecting)
             .padding(end = 4.dp)
             .widthIn(max = 360.dp).heightIn(min = 48.dp)
             .semantics {

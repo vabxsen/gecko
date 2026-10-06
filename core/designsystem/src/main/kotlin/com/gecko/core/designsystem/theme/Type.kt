@@ -26,9 +26,9 @@ val GeckoTypography = Typography(
     headlineLarge = TextStyle(
         fontFamily = baseFontFamily,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 30.sp,
-        lineHeight = 38.sp,
-        letterSpacing = (-0.25).sp,
+        fontSize = 28.sp,
+        lineHeight = 36.sp,
+        letterSpacing = (-0.7).sp,
     ),
     headlineMedium = TextStyle(
         fontFamily = baseFontFamily,
@@ -52,9 +52,9 @@ val GeckoTypography = Typography(
     titleMedium = TextStyle(
         fontFamily = baseFontFamily,
         fontWeight = FontWeight.Medium,
-        fontSize = 16.sp,
-        lineHeight = 22.sp,
-        letterSpacing = 0.1.sp,
+        fontSize = 15.sp,
+        lineHeight = 21.sp,
+        letterSpacing = 0.sp,
     ),
     titleSmall = TextStyle(
         fontFamily = baseFontFamily,

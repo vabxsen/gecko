@@ -1,13 +1,12 @@
 package com.gecko.core.designsystem.component
 
-import androidx.compose.animation.AnimatedVisibility
+import com.gecko.core.designsystem.theme.geckoPopIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,17 +40,17 @@ fun GeckoErrorDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        modifier = modifier,
+        modifier = modifier.geckoPopIn(),
         title = { Text(title) },
         text = {
             Column {
                 Text(explanation, style = MaterialTheme.typography.bodyMedium)
                 if (technicalDetail != null) {
                     Spacer(Modifier.height(4.dp))
-                    TextButton(onClick = { detailShown = !detailShown }) {
+                    GeckoTextButton(onClick = { detailShown = !detailShown }) {
                         Text(if (detailShown) "Hide details" else "Details")
                     }
-                    AnimatedVisibility(visible = detailShown) {
+                    GeckoExpandableContent(visible = detailShown) {
                         Text(
                             text = technicalDetail,
                             style = MaterialTheme.typography.bodySmall,
@@ -63,16 +62,16 @@ fun GeckoErrorDialog(
         },
         confirmButton = {
             if (fixLabel != null) {
-                TextButton(onClick = onFix) { Text(fixLabel) }
+                GeckoTextButton(onClick = onFix) { Text(fixLabel) }
             } else {
                 // Nothing the app can do from here — adding credit, rephrasing — so the only
                 // honest button is the one that closes it.
-                TextButton(onClick = onDismiss) { Text("Close") }
+                GeckoTextButton(onClick = onDismiss) { Text("Close") }
             }
         },
         dismissButton = {
             if (fixLabel != null) {
-                TextButton(onClick = onDismiss) { Text("Dismiss") }
+                GeckoTextButton(onClick = onDismiss) { Text("Dismiss") }
             }
         },
     )

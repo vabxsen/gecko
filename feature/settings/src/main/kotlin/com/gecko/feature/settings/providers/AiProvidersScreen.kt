@@ -1,5 +1,6 @@
 package com.gecko.feature.settings.providers
 
+import com.gecko.core.designsystem.component.GeckoButton
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.animation.animateColorAsState
@@ -7,7 +8,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.material3.Button
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import com.gecko.core.designsystem.component.GeckoPageIntro
@@ -80,7 +80,7 @@ fun AiProvidersScreen(
                         { enabled -> viewModel.setEnabled(row.config.id, enabled) }, Modifier.animateItem())
                 }
                 if (canAddMore) {
-                    item { Button(onClick = onAddProvider, modifier = Modifier.fillMaxWidth()) {
+                    item { GeckoButton(onClick = onAddProvider, modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Filled.Add, null, Modifier.padding(end = 8.dp))
                         Text("Add API key", Modifier.padding(vertical = 8.dp))
                     } }

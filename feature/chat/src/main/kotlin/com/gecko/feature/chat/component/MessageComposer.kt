@@ -1,5 +1,6 @@
 package com.gecko.feature.chat.component
 
+import com.gecko.core.designsystem.component.GeckoIconButton
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import android.Manifest
@@ -18,6 +19,16 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import com.gecko.core.designsystem.theme.geckoPress
+import com.gecko.core.designsystem.theme.LocalGeckoMotionEnabled
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.focus.FocusRequester
@@ -45,8 +56,8 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ripple
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -91,6 +102,14 @@ fun MessageComposer(
     var text by rememberSaveable { mutableStateOf("") }
     val inputFocus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
+    val focusInteraction = remember { MutableInteractionSource() }
+    val focused by focusInteraction.collectIsFocusedAsState()
+    val borderColor by animateColorAsState(
+        if (focused) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
+        tween(GeckoMotion.DURATION_STANDARD), label = "composerFocusBorder")
+    val elevation by animateDpAsState(if (focused) 4.dp else 0.dp,
+        tween(GeckoMotion.DURATION_STANDARD), label = "composerFocusElevation")
+    val haptics = LocalHapticFeedback.current
     LaunchedEffect(suggestedPrompt) {
         if (suggestedPrompt != null) {
             text = suggestedPrompt
@@ -182,6 +201,7 @@ fun MessageComposer(
         if (isGenerating || isEncodingAttachment) return
         if (text.isBlank() && attachmentBase64 == null) return
         if (onSend(text, attachmentBase64)) {
+            haptics.performHapticFeedback(HapticFeedbackType.Confirm)
             text = ""
             attachmentBase64 = null
         }
@@ -189,8 +209,8 @@ fun MessageComposer(
 
     Surface(
         color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        shadowElevation = 0.dp,
+        border = BorderStroke(1.dp, borderColor),
+        shadowElevation = elevation,
         shape = RoundedCornerShape(28.dp),
         modifier = modifier.fillMaxWidth(),
     ) {
@@ -206,6 +226,7 @@ fun MessageComposer(
             }
                 TextField(
                     value = text,
+                    interactionSource = focusInteraction,
                     onValueChange = { text = it },
                     modifier = Modifier.fillMaxWidth().heightIn(max = maxInputHeight).focusRequester(inputFocus),
                     placeholder = { Text("Message Gecko…") },
@@ -256,7 +277,7 @@ fun MessageComposer(
                         onClick = onStop,
                     )
                 } else {
-                    IconButton(onClick = ::onMicClick, enabled = speechRecognizer != null) {
+                    GeckoIconButton(onClick = ::onMicClick, enabled = speechRecognizer != null) {
                         Icon(
                             imageVector = if (isListening) Icons.Filled.FilledMic else Icons.Outlined.Mic,
                             contentDescription = if (isListening) "Stop voice input" else "Voice input",
@@ -287,6 +308,10 @@ private fun ComposerActionButton(
     enabled: Boolean,
     onClick: () -> Unit,
 ) {
+    val press = remember { MutableInteractionSource() }
+    val motion = LocalGeckoMotionEnabled.current
+    val rotation = animateFloatAsState(if (enabled) 0f else 45f,
+        spring(dampingRatio = 0.8f, stiffness = 500f), label = "sendReadyRotation")
     val colorAnimSpec = tween<androidx.compose.ui.graphics.Color>(GeckoMotion.DURATION_QUICK, easing = GeckoMotion.EasingStandard)
     val containerColor by animateColorAsState(
         targetValue = if (enabled) {
@@ -310,16 +335,17 @@ private fun ComposerActionButton(
         modifier = Modifier
             .padding(end = 2.dp)
             .size(48.dp)
+            .geckoPress(press, enabled)
             .clip(CircleShape)
             .background(containerColor, CircleShape)
-            .clickable(enabled = enabled, onClick = onClick),
+            .clickable(interactionSource = press, indication = ripple(), enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
             tint = contentColor,
-            modifier = Modifier.size(20.dp),
+            modifier = Modifier.size(20.dp).graphicsLayer { rotationZ = if (motion) rotation.value else 0f },
         )
     }
 }
@@ -343,7 +369,7 @@ private fun AttachmentPreviewChip(base64: String, onRemove: () -> Unit) {
                         .clip(RoundedCornerShape(16.dp)),
                 )
             }
-            IconButton(
+            GeckoIconButton(
                 onClick = onRemove,
                 modifier = Modifier
                     .align(Alignment.TopEnd)

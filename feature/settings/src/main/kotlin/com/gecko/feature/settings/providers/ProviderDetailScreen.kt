@@ -1,6 +1,10 @@
 package com.gecko.feature.settings.providers
 
-import androidx.compose.animation.AnimatedVisibility
+import com.gecko.core.designsystem.theme.geckoPopIn
+import com.gecko.core.designsystem.component.GeckoButton
+import com.gecko.core.designsystem.component.GeckoTextButton
+import com.gecko.core.designsystem.component.GeckoIconButton
+import com.gecko.core.designsystem.component.GeckoExpandableContent
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -68,11 +72,11 @@ fun ProviderDetailScreen(onBack: () -> Unit, modifier: Modifier = Modifier,
                             shape = MaterialTheme.shapes.medium,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                             visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
-                            trailingIcon = { IconButton(onClick = { visible = !visible }) {
+                            trailingIcon = { GeckoIconButton(onClick = { visible = !visible }) {
                                 Icon(if (visible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
                                     if (visible) "Hide key" else "Show key")
                             } })
-                        Button(onClick = {
+                        GeckoButton(onClick = {
                             if (apiKey.trim() != state.apiKeyValue) viewModel.saveApiKey(apiKey)
                             else viewModel.testConnection()
                         }, modifier = Modifier.fillMaxWidth(), enabled = apiKey.isNotBlank() && !state.isSavingKey) {
@@ -88,41 +92,39 @@ fun ProviderDetailScreen(onBack: () -> Unit, modifier: Modifier = Modifier,
                                 style = MaterialTheme.typography.bodyMedium)
                         }
                     }
-                    TextButton(onClick = { advanced = !advanced }) {
-                        Text(if (advanced) "Hide advanced settings" else "Advanced settings")
-                    }
-                    AnimatedVisibility(advanced) {
+                    AdvancedSettingsButton(advanced, { advanced = !advanced })
+                    GeckoExpandableContent(advanced) {
                         SettingsPanel {
                             OutlinedTextField(label, { label = it }, Modifier.fillMaxWidth(), label = { Text("Connection name") },
                                 shape = MaterialTheme.shapes.medium, singleLine = true)
-                            TextButton(onClick = { viewModel.setLabel(label) }, enabled = label.isNotBlank() && label != state.label) {
+                            GeckoTextButton(onClick = { viewModel.setLabel(label) }, enabled = label.isNotBlank() && label != state.label) {
                                 Text("Save name")
                             }
                             if (state.providerId == ProviderId.OPENAI) {
                                 OutlinedTextField(baseUrl, { baseUrl = it }, Modifier.fillMaxWidth(), label = { Text("Custom base URL") },
                                     supportingText = { Text("Leave blank to use OpenAI.") }, singleLine = true,
                                     shape = MaterialTheme.shapes.medium, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
-                                TextButton(onClick = { viewModel.setBaseUrlOverride(baseUrl) },
+                                GeckoTextButton(onClick = { viewModel.setBaseUrlOverride(baseUrl) },
                                     enabled = baseUrl.trim() != state.baseUrlOverride.orEmpty()) { Text("Save URL") }
                             }
                             if (state.hasApiKey) {
-                                TextButton(onClick = { viewModel.clearApiKey(); apiKey = "" }, enabled = !state.isSavingKey) {
+                                GeckoTextButton(onClick = { viewModel.clearApiKey(); apiKey = "" }, enabled = !state.isSavingKey) {
                                     Text("Remove saved key", color = MaterialTheme.colorScheme.error)
                                 }
                             }
                         }
                     }
-                    TextButton(onClick = { confirmDelete = true }, enabled = !state.isSavingKey) {
+                    GeckoTextButton(onClick = { confirmDelete = true }, enabled = !state.isSavingKey) {
                         Text("Delete connection", color = MaterialTheme.colorScheme.error)
                     }
                 }
             }
         }
     }
-    if (confirmDelete) AlertDialog(onDismissRequest = { confirmDelete = false },
+    if (confirmDelete) AlertDialog(modifier = Modifier.geckoPopIn(), onDismissRequest = { confirmDelete = false },
         title = { Text("Delete this connection?") }, text = { Text("Its saved API key will be removed. Your conversations will stay on this device.") },
-        confirmButton = { TextButton(onClick = { confirmDelete = false; viewModel.deleteProvider(onDeleted = onBack) }) { Text("Delete") } },
-        dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } })
+        confirmButton = { GeckoTextButton(onClick = { confirmDelete = false; viewModel.deleteProvider(onDeleted = onBack) }) { Text("Delete") } },
+        dismissButton = { GeckoTextButton(onClick = { confirmDelete = false }) { Text("Cancel") } })
 }
 
 @Composable

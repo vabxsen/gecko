@@ -18,15 +18,16 @@ import com.gecko.core.designsystem.icon.GeckoLogoMark
 
 @Composable
 fun GeckoPageIntro(title: String, description: String, modifier: Modifier = Modifier) {
-    Column(modifier.padding(top = 8.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(modifier.padding(top = 16.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(title, style = MaterialTheme.typography.headlineLarge, modifier = Modifier.semantics { heading() })
-        Text(description, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
 @Composable
 fun GeckoBrandTile(modifier: Modifier = Modifier, size: Dp = 72.dp) {
     Surface(modifier.size(size), shape = MaterialTheme.shapes.large,
+        shadowElevation = 2.dp,
         color = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary) {
         Icon(GeckoLogoMark, contentDescription = null, modifier = Modifier.padding(4.dp))
     }

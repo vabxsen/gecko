@@ -10,7 +10,6 @@ import androidx.compose.material.icons.outlined.Refresh
 import com.gecko.core.designsystem.component.GeckoPageIntro
 import com.gecko.feature.settings.component.SettingsPageFrame
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Info
@@ -32,6 +31,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.gecko.feature.settings.component.SettingsContentPadding
 import com.gecko.feature.settings.component.SettingsRow
+import com.gecko.feature.settings.component.SettingsGroup
+import com.gecko.feature.settings.component.SettingsGroupDivider
 import com.gecko.feature.settings.component.SettingsSectionHeader
 import com.gecko.feature.settings.component.SettingsTopBar
 import com.gecko.feature.settings.update.UpdateCheckState
@@ -86,7 +87,7 @@ fun SettingsListScreen(
         // and "Model preferences" â€” two menu items for one decision, where only the second one
         // actually changed anything.
         val ai = listOf(
-            SettingsDestination("AI Providers", "API keys and the model you chat with", Icons.Outlined.SmartToy, onNavigateAiProviders),
+            SettingsDestination("AI Providers", "API keys and connections", Icons.Outlined.SmartToy, onNavigateAiProviders),
         )
         val other = listOf(
             SettingsDestination("Data & Privacy", "Export and clear local data", Icons.Outlined.PrivacyTip, onNavigateDataPrivacy),
@@ -98,23 +99,34 @@ fun SettingsListScreen(
                 contentPadding = SettingsContentPadding, verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 item { GeckoPageIntro("Make it yours", "A little fine-tuning for the way you think.") }
                 item { SettingsSectionHeader("Your AI") }
-                items(ai) { DestinationRow(it) }
+                item { SettingsGroup { ai.forEach { DestinationRow(it) } } }
                 item { SettingsSectionHeader("Your experience") }
-                items(general) { DestinationRow(it) }
+                item { SettingsGroup {
+                    general.forEachIndexed { index, destination ->
+                        if (index > 0) SettingsGroupDivider()
+                        DestinationRow(destination)
+                    }
+                } }
                 item { SettingsSectionHeader("Your app") }
-                items(other) { DestinationRow(it) }
                 item {
-                    val busy = updateState is UpdateCheckState.Checking || updateState is UpdateCheckState.Downloading
-                    SettingsRow(
-                        title = when (updateState) {
-                            is UpdateCheckState.Downloading -> "Downloading update…"
-                            is UpdateCheckState.Checking -> "Checking for updates…"
-                            else -> "Check for updates"
-                        },
-                        subtitle = "Keep Gecko up to date",
-                        leading = { Icon(Icons.Outlined.Refresh, null) },
-                        onClick = if (busy) null else updateViewModel::checkForUpdate,
-                    )
+                    SettingsGroup {
+                        other.forEach { destination ->
+                            DestinationRow(destination)
+                            SettingsGroupDivider()
+                        }
+                        val busy = updateState is UpdateCheckState.Checking || updateState is UpdateCheckState.Downloading
+                        SettingsRow(
+                            title = when (updateState) {
+                                is UpdateCheckState.Downloading -> "Downloading update…"
+                                is UpdateCheckState.Checking -> "Checking for updates…"
+                                else -> "Check for updates"
+                            },
+                            subtitle = "Keep Gecko up to date",
+                            leading = { Icon(Icons.Outlined.Refresh, null) },
+                            onClick = if (busy) null else updateViewModel::checkForUpdate,
+                            grouped = true,
+                        )
+                    }
                 }
             }
         }
@@ -138,5 +150,6 @@ private fun DestinationRow(destination: SettingsDestination) {
         leading = { Icon(destination.icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
         trailing = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
         onClick = destination.onClick,
+        grouped = true,
     )
 }

@@ -1,13 +1,18 @@
 package com.gecko.feature.settings.providers
 
+import com.gecko.core.designsystem.component.GeckoButton
+import com.gecko.core.designsystem.component.GeckoTextButton
+import com.gecko.core.designsystem.component.GeckoIconButton
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import android.content.ClipboardManager
 import com.gecko.core.designsystem.component.GeckoBrandTile
 import com.gecko.core.designsystem.component.GeckoPageIntro
 import com.gecko.feature.settings.component.SettingsPanel
+import com.gecko.feature.settings.component.AdvancedSettingsButton
+import com.gecko.core.designsystem.theme.geckoReveal
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.animation.AnimatedVisibility
+import com.gecko.core.designsystem.component.GeckoExpandableContent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,18 +30,15 @@ import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -88,7 +90,7 @@ internal fun AddProviderContent(
     Scaffold(modifier = modifier, topBar = { SettingsTopBar("Connect your AI", onBack) }) { padding ->
         Box(Modifier.padding(padding).imePadding().fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
             Column(
-                Modifier.widthIn(max = 560.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp),
+                Modifier.widthIn(max = 560.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp).geckoReveal(40),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 GeckoBrandTile(size = 64.dp)
@@ -102,13 +104,13 @@ internal fun AddProviderContent(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                         visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
                         trailingIcon = {
-                            IconButton(onClick = { keyVisible = !keyVisible }) {
+                            GeckoIconButton(onClick = { keyVisible = !keyVisible }) {
                                 Icon(if (keyVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
                                     if (keyVisible) "Hide key" else "Show key")
                             }
                         },
                     )
-                    TextButton(onClick = {
+                    GeckoTextButton(onClick = {
                         val clip = context.getSystemService(ClipboardManager::class.java).primaryClip
                         if (clip != null && clip.itemCount > 0) {
                             clip.getItemAt(0).text?.toString()?.let(onKeyChange)
@@ -126,7 +128,7 @@ internal fun AddProviderContent(
                                 Text(state.providerLabel.ifBlank { "Which provider is this key from?" },
                                     modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
                                 Box {
-                                    TextButton(onClick = { chooseProvider = true }, enabled = !state.isSaving) {
+                                    GeckoTextButton(onClick = { chooseProvider = true }, enabled = !state.isSaving) {
                                         Text(if (state.selectedProviderId == null) "Choose" else "Change")
                                         Icon(Icons.Outlined.ExpandMore, null, Modifier.size(18.dp))
                                     }
@@ -158,7 +160,7 @@ internal fun AddProviderContent(
                             }
                         }
                     }
-                    Button(onClick = { keyboard?.hide(); onConnect() }, enabled = state.canSave, modifier = Modifier.fillMaxWidth()) {
+                    GeckoButton(onClick = { keyboard?.hide(); onConnect() }, enabled = state.canSave, modifier = Modifier.fillMaxWidth()) {
                         if (state.isSaving) CircularProgressIndicator(Modifier.padding(end = 10.dp).size(18.dp), strokeWidth = 2.dp)
                         Text(if (state.isSaving) "Connecting…" else "Connect & start chatting", Modifier.padding(vertical = 8.dp))
                     }
@@ -170,10 +172,8 @@ internal fun AddProviderContent(
                     Text("Your key is encrypted and stored on this device.", style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                TextButton(onClick = { advanced = !advanced }, enabled = !state.isSaving) {
-                    Text(if (advanced) "Hide advanced settings" else "Advanced settings")
-                }
-                AnimatedVisibility(advanced) {
+                AdvancedSettingsButton(advanced, { advanced = !advanced }, enabled = !state.isSaving)
+                GeckoExpandableContent(advanced) {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         OutlinedTextField(state.label, onLabelChange, Modifier.fillMaxWidth(),
                             label = { Text("Name (optional)") }, singleLine = true, enabled = !state.isSaving)

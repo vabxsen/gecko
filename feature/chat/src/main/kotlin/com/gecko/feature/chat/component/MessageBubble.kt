@@ -1,5 +1,8 @@
 package com.gecko.feature.chat.component
 
+import com.gecko.core.designsystem.component.GeckoButton
+import com.gecko.core.designsystem.component.GeckoTextButton
+import com.gecko.core.designsystem.component.GeckoIconButton
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.animation.AnimatedVisibility
@@ -28,15 +31,12 @@ import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -128,8 +128,8 @@ private fun EditingBubble(initialText: String, onSubmit: (String) -> Unit, onCan
             shape = RoundedCornerShape(16.dp),
         )
         Row(modifier = Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.End) {
-            TextButton(onClick = onCancel) { Text("Cancel") }
-            Button(onClick = { if (text.isNotBlank()) onSubmit(text) }, enabled = text.isNotBlank()) {
+            GeckoTextButton(onClick = onCancel) { Text("Cancel") }
+            GeckoButton(onClick = { if (text.isNotBlank()) onSubmit(text) }, enabled = text.isNotBlank()) {
                 Text("Send")
             }
         }
@@ -220,7 +220,7 @@ private fun MessageErrorNotice(label: String, onExplain: () -> Unit) {
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.error,
         )
-        TextButton(onClick = onExplain) { Text("What happened?") }
+        GeckoTextButton(onClick = onExplain) { Text("What happened?") }
     }
 }
 
@@ -263,7 +263,7 @@ private fun MessageActionsRow(alignEnd: Boolean, content: @Composable RowScope.(
 
 @Composable
 private fun ActionIcon(icon: ImageVector, contentDescription: String, onClick: () -> Unit, enabled: Boolean = true) {
-    IconButton(onClick = onClick, enabled = enabled) {
+    GeckoIconButton(onClick = onClick, enabled = enabled) {
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
@@ -277,7 +277,7 @@ private fun ActionIcon(icon: ImageVector, contentDescription: String, onClick: (
 private fun CopyActionIcon(text: String) {
     val clipboard = LocalClipboardManager.current
     var copied by remember { mutableStateOf(false) }
-    IconButton(
+    GeckoIconButton(
         onClick = {
             clipboard.setText(AnnotatedString(text))
             copied = true

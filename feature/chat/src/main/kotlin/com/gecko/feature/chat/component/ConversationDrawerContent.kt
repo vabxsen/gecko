@@ -1,5 +1,7 @@
 package com.gecko.feature.chat.component
 
+import com.gecko.core.designsystem.component.GeckoTextButton
+import com.gecko.core.designsystem.component.GeckoIconButton
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.animation.AnimatedContent
@@ -9,6 +11,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import com.gecko.core.designsystem.theme.geckoPress
+import com.gecko.core.designsystem.theme.LocalGeckoMotionEnabled
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,13 +49,11 @@ import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
@@ -87,6 +90,9 @@ fun ConversationDrawerContent(
     navigationEnabled: Boolean = true,
 ) {
     val keyboard = LocalSoftwareKeyboardController.current
+    val motion = LocalGeckoMotionEnabled.current
+    val newChatPress = remember { MutableInteractionSource() }
+    val settingsPress = remember { MutableInteractionSource() }
     var searchActive by rememberSaveable { mutableStateOf(false) }
     val searchFocusRequester = remember { FocusRequester() }
 
@@ -119,7 +125,7 @@ fun ConversationDrawerContent(
                                     unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
                                 ),
                             )
-                            IconButton(onClick = {
+                            GeckoIconButton(onClick = {
                                 searchActive = false
                                 onSearchQueryChange("")
                             }) {
@@ -138,7 +144,7 @@ fun ConversationDrawerContent(
                                 letterSpacing = (-0.5).sp,
                                 modifier = Modifier.weight(1f),
                             )
-                            IconButton(onClick = { searchActive = true }) {
+                            GeckoIconButton(onClick = { searchActive = true }) {
                                 Box(
                                     modifier = Modifier
                                         .size(36.dp)
@@ -159,10 +165,11 @@ fun ConversationDrawerContent(
                 Spacer(Modifier.height(16.dp))
                 Surface(
                     onClick = onNewChat,
+                    interactionSource = newChatPress,
                     enabled = navigationEnabled,
                     color = MaterialTheme.colorScheme.primary,
                     shape = MaterialTheme.shapes.large,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().geckoPress(newChatPress, navigationEnabled),
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
@@ -215,15 +222,15 @@ fun ConversationDrawerContent(
                             onRename = { newTitle -> onRenameConversation(conversation.id, newTitle) },
                             onDelete = { onDeleteConversation(conversation.id) },
                             onTogglePinned = { onTogglePinned(conversation.id, !conversation.pinned) },
-                            modifier = Modifier.animateItem(),
+                            modifier = if (motion) Modifier.animateItem() else Modifier,
                         )
                     }
                 }
             }
 
-            Surface(onClick = onOpenSettings, shape = MaterialTheme.shapes.large,
+            Surface(onClick = onOpenSettings, interactionSource = settingsPress, shape = MaterialTheme.shapes.large,
                 color = MaterialTheme.colorScheme.surfaceContainer,
-                modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                modifier = Modifier.fillMaxWidth().padding(16.dp).geckoPress(settingsPress)) {
                 Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                     Icon(Icons.Outlined.Settings, contentDescription = null)
@@ -246,6 +253,7 @@ private fun ConversationRow(
     modifier: Modifier = Modifier,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
+    val press = remember { MutableInteractionSource() }
     var renaming by remember { mutableStateOf(false) }
     var renameText by rememberSaveable(conversation.id) { mutableStateOf(conversation.title) }
     val containerColor by animateColorAsState(
@@ -256,10 +264,11 @@ private fun ConversationRow(
 
     Surface(
         onClick = onClick,
+        interactionSource = press,
         enabled = enabled,
         color = containerColor,
         shape = RoundedCornerShape(12.dp),
-        modifier = modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
+        modifier = modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp).geckoPress(press, enabled),
     ) {
         if (renaming) {
             Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -269,7 +278,7 @@ private fun ConversationRow(
                     modifier = Modifier.weight(1f),
                     singleLine = true,
                 )
-                TextButton(onClick = {
+                GeckoTextButton(onClick = {
                     onRename(renameText.trim())
                     renaming = false
                 }, enabled = renameText.isNotBlank()) { Text("Save") }
@@ -298,7 +307,7 @@ private fun ConversationRow(
                 modifier = Modifier.weight(1f),
             )
             Box {
-                IconButton(onClick = { menuExpanded = true }) {
+                GeckoIconButton(onClick = { menuExpanded = true }) {
                     Icon(Icons.Outlined.MoreVert, contentDescription = "More options", modifier = Modifier.size(18.dp))
                 }
                 DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {

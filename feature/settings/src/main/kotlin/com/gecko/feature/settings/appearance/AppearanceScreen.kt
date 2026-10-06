@@ -10,6 +10,12 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import com.gecko.core.designsystem.theme.geckoPress
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -45,10 +51,15 @@ fun AppearanceScreen(onBack: () -> Unit, modifier: Modifier = Modifier,
 private fun ThemeOption(label: String, description: String, mode: ThemeMode, selectedMode: ThemeMode,
     onSelect: (ThemeMode) -> Unit) {
     val selected = mode == selectedMode
+    val press = remember { MutableInteractionSource() }
+    val borderWidth by animateDpAsState(if (selected) 2.dp else 1.dp, tween(180), label = "themeBorderWidth")
+    val borderColor by animateColorAsState(
+        if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+        tween(180), label = "themeBorderColor")
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(if (selected) 2.dp else 1.dp,
-            if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant),
-        modifier = Modifier.fillMaxWidth().selectable(selected, role = Role.RadioButton, onClick = { onSelect(mode) })) {
+        border = BorderStroke(borderWidth, borderColor),
+        modifier = Modifier.fillMaxWidth().geckoPress(press).selectable(selected,
+            interactionSource = press, indication = ripple(), role = Role.RadioButton, onClick = { onSelect(mode) })) {
         Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             ThemePreview(mode)
