@@ -95,5 +95,14 @@ object GeckoDatabaseMigrations {
         }
     }
 
-    val ALL: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+    private val MIGRATION_5_6 = object : Migration(5, 6) {
+        override fun migrate(database: SupportSQLiteDatabase) {
+            database.execSQL("ALTER TABLE messages ADD COLUMN documentName TEXT")
+            database.execSQL("ALTER TABLE messages ADD COLUMN documentText TEXT")
+            database.execSQL("ALTER TABLE messages ADD COLUMN documentPageCount INTEGER")
+            database.execSQL("CREATE TABLE IF NOT EXISTS drafts (conversationId TEXT NOT NULL PRIMARY KEY, text TEXT NOT NULL, imageBase64 TEXT, documentName TEXT, documentText TEXT, documentPageCount INTEGER)")
+        }
+    }
+
+    val ALL: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
 }

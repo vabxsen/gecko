@@ -69,47 +69,50 @@ fun MessageList(
         }
     }
 
-    Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-        LazyColumn(
-            state = listState,
-            reverseLayout = true,
-            modifier = Modifier.widthIn(max = 800.dp).fillMaxWidth().fillMaxHeight(),
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
-            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(18.dp),
-        ) {
-            // Emitted first, so under `reverseLayout` it lands at the very bottom: breathing room
-            // between the newest message and the composer.
-            item(key = "bottom-spacing") { Spacer(Modifier.padding(bottom = 4.dp)) }
+    val reader = rememberReadAloud()
+    androidx.compose.runtime.CompositionLocalProvider(LocalReadAloud provides reader) {
+        Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+            LazyColumn(
+                state = listState,
+                reverseLayout = true,
+                modifier = Modifier.widthIn(max = 800.dp).fillMaxWidth().fillMaxHeight(),
+                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
+                verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(18.dp),
+            ) {
+                // Emitted first, so under `reverseLayout` it lands at the very bottom: breathing room
+                // between the newest message and the composer.
+                item(key = "bottom-spacing") { Spacer(Modifier.padding(bottom = 4.dp)) }
 
-            // Reversed to match the reversed layout, so the newest message is the one pinned to
-            // the bottom. `asReversed()` is a view over the same list, not a copy.
-            items(messages.asReversed(), key = { it.id }) { message ->
-                MessageBubble(
-                    message = message,
-                    visibleContent = if (message.id == lastMessageId) lastVisibleContent else message.content,
-                    isEditing = message.id == editingMessageId,
-                    isLastAssistantMessage = message.id == lastAssistantId,
-                    onBeginEdit = { onBeginEdit(message.id) },
-                    onSubmitEdit = onSubmitEdit,
-                    onCancelEdit = onCancelEdit,
-                    onRegenerate = onRegenerate,
-                    onShowError = onShowError,
-                    actionsEnabled = !isGenerating,
-                    // Fade new items only. Placement/size animation would fight a growing stream.
-                    modifier = if (motion) Modifier.animateItem(
-                        fadeInSpec = tween(GeckoMotion.DURATION_STANDARD),
-                        placementSpec = null, fadeOutSpec = null,
-                    ) else Modifier,
-                )
+                // Reversed to match the reversed layout, so the newest message is the one pinned to
+                // the bottom. `asReversed()` is a view over the same list, not a copy.
+                items(messages.asReversed(), key = { it.id }) { message ->
+                    MessageBubble(
+                        message = message,
+                        visibleContent = if (message.id == lastMessageId) lastVisibleContent else message.content,
+                        isEditing = message.id == editingMessageId,
+                        isLastAssistantMessage = message.id == lastAssistantId,
+                        onBeginEdit = { onBeginEdit(message.id) },
+                        onSubmitEdit = onSubmitEdit,
+                        onCancelEdit = onCancelEdit,
+                        onRegenerate = onRegenerate,
+                        onShowError = onShowError,
+                        actionsEnabled = !isGenerating,
+                        // Fade new items only. Placement/size animation would fight a growing stream.
+                        modifier = if (motion) Modifier.animateItem(
+                            fadeInSpec = tween(GeckoMotion.DURATION_STANDARD),
+                            placementSpec = null, fadeOutSpec = null,
+                        ) else Modifier,
+                    )
+                }
             }
-        }
 
-        ScrollToBottomFab(
-            visible = !isAtBottom && messages.isNotEmpty(),
-            onClick = { scope.launch { listState.animateScrollToItem(0) } },
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(16.dp),
-        )
+            ScrollToBottomFab(
+                visible = !isAtBottom && messages.isNotEmpty(),
+                onClick = { scope.launch { listState.animateScrollToItem(0) } },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(16.dp),
+            )
+        }
     }
 }

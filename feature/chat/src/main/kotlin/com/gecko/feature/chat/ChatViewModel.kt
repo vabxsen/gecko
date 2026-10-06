@@ -1,5 +1,6 @@
 package com.gecko.feature.chat
 
+import com.gecko.core.model.chat.DocumentAttachment
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.gecko.core.common.util.newId
@@ -52,6 +53,8 @@ class ChatViewModel @Inject constructor(
     private val editAndResendMessageUseCase: EditAndResendMessageUseCase,
     private val connectProviderUseCase: ConnectProviderUseCase,
 ) : ViewModel() {
+
+    val drafts = DraftController(conversationRepository, viewModelScope)
 
     private val currentConversationId = MutableStateFlow<String?>(null)
     private val searchQuery = MutableStateFlow("")
@@ -170,20 +173,22 @@ class ChatViewModel @Inject constructor(
 
     fun selectConversation(conversationId: String) {
         if (isGenerating.value) return
+        drafts.load(conversationId)
         currentConversationId.value = conversationId
         editingMessageId.value = null
     }
 
     fun startNewConversation() {
         if (isGenerating.value) return
+        drafts.load(null)
         currentConversationId.value = null
         editingMessageId.value = null
     }
 
-    fun sendMessage(text: String, attachmentImageBase64: String? = null): Boolean {
+    fun sendMessage(text: String, attachmentImageBase64: String? = null, document: DocumentAttachment? = null): Boolean {
         if (isGenerating.value || loadingModelConfigIds.value.isNotEmpty()) return false
         val trimmed = text.trim()
-        if (trimmed.isEmpty() && attachmentImageBase64 == null) return false
+        if (trimmed.isEmpty() && attachmentImageBase64 == null && document == null) return false
         val configId = selection.value?.configId
         val modelId = selection.value?.modelId
         if (configId == null || modelId == null || uiState.value.enabledProviders.none { it.id == configId }) {
@@ -200,20 +205,21 @@ class ChatViewModel @Inject constructor(
         runGeneration(configId) {
             val providerId = resolveProviderId(configId) ?: return@runGeneration flowOf(unresolvedProviderError())
             val conversationId = currentConversationId.value
-                ?: conversationRepository.createConversation(providerId, modelId).id.also { currentConversationId.value = it }
+                ?: conversationRepository.createConversation(providerId, modelId).id.also { currentConversationId.value = it; drafts.load(it) }
 
             val history = conversationRepository.observeMessages(conversationId).first()
             val userMessage = ChatMessage(
                 id = newId(),
                 conversationId = conversationId,
                 role = MessageRole.USER,
-                content = trimmed,
+                content = trimmed.ifBlank { if (document != null) "Summarize this document." else "" },
                 createdAt = Instant.now(),
                 status = MessageStatus.COMPLETE,
                 attachmentImageBase64 = attachmentImageBase64,
+                document = document,
             )
             conversationRepository.saveMessage(userMessage)
-            maybeAutoTitle(conversationId, history, trimmed.ifBlank { "Image attachment" })
+            maybeAutoTitle(conversationId, history, trimmed.ifBlank { document?.name ?: "Image attachment" })
 
             sendChatMessageUseCase(conversationId, configId, providerId, modelId, history + userMessage, streaming = uiState.value.streamingEnabled)
         }
@@ -277,7 +283,7 @@ class ChatViewModel @Inject constructor(
                 generationJob?.join()
             }
             conversationRepository.deleteConversation(conversationId)
-            if (currentConversationId.value == conversationId) currentConversationId.value = null
+            if (currentConversationId.value == conversationId) { currentConversationId.value = null; drafts.load(null) }
         }
     }
 

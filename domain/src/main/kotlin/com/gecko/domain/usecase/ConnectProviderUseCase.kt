@@ -31,7 +31,7 @@ class ConnectProviderUseCase @Inject constructor(
     private val providers: ProviderConfigRepository,
     private val preferences: UserPreferencesRepository,
 ) {
-    suspend operator fun invoke(configId: String): Result<ModelInfo> = try {
+    suspend operator fun invoke(configId: String, activate: Boolean = true): Result<ModelInfo> = try {
         withTimeout(90_000) {
             providers.setConnectionStatus(configId, ConnectionStatus.Testing)
             val config = providers.observe(configId).first()
@@ -54,8 +54,10 @@ class ConnectProviderUseCase @Inject constructor(
                     // Keep Testing until both preferences and availability have been saved, so
                     // chat's legacy auto-selection cannot replace the model verified above.
                     providers.setVerifiedModel(configId, model.modelId)
-                    providers.setEnabled(configId, true)
-                    preferences.setDefaultSelection(configId, model.modelId)
+                    if (activate) {
+                        providers.setEnabled(configId, true)
+                        preferences.setDefaultSelection(configId, model.modelId)
+                    }
                     providers.setConnectionStatus(configId, ConnectionStatus.Success)
                     return@withTimeout Result.success(model)
                 }

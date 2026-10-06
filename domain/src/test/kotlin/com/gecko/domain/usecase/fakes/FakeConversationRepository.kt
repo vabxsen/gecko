@@ -15,6 +15,10 @@ class FakeConversationRepository : ConversationRepository {
     private val conversations = MutableStateFlow<List<Conversation>>(emptyList())
     private val messagesByConversation = mutableMapOf<String, MutableStateFlow<List<ChatMessage>>>()
 
+    private val drafts = mutableMapOf<String?, com.gecko.core.model.chat.ChatDraft>()
+    override suspend fun getDraft(conversationId: String?) = drafts[conversationId] ?: com.gecko.core.model.chat.ChatDraft()
+    override suspend fun saveDraft(conversationId: String?, draft: com.gecko.core.model.chat.ChatDraft) { drafts[conversationId] = draft }
+
     override fun observeConversations(): Flow<List<Conversation>> = conversations
 
     override fun searchConversations(query: String): Flow<List<Conversation>> =
@@ -51,11 +55,13 @@ class FakeConversationRepository : ConversationRepository {
     }
 
     override suspend fun deleteConversation(id: String) {
+        drafts.remove(id)
         conversations.update { list -> list.filterNot { it.id == id } }
         messagesByConversation.remove(id)
     }
 
     override suspend fun deleteAllConversations() {
+        drafts.clear()
         conversations.value = emptyList()
         messagesByConversation.clear()
     }

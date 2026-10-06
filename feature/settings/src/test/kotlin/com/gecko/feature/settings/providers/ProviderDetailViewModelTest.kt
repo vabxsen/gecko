@@ -25,6 +25,28 @@ class ProviderDetailViewModelTest {
     @get:Rule
     val main = MainDispatcherRule(StandardTestDispatcher())
 
+    @Test fun diagnosticsDoNotActivateADisabledConnectionOrSwitchTheUsersSelection() = runTest {
+        val providers = FakeProviderConfigRepository()
+        val keys = FakeSecureKeyRepository()
+        val prefs = FakeUserPreferencesRepository(com.gecko.core.model.preferences.UserPreferences(
+            defaultProviderConfigId = "other", defaultModelId = "other-model"))
+        val model = com.gecko.core.model.provider.ModelInfo(ProviderId.OPENAI, "gpt-4o-mini", "GPT", 128000, true, true)
+        val chat = FakeChatCompletionRepository(fetchModelsResult = Result.success(listOf(model)))
+        val id = providers.addProvider(ProviderId.OPENAI, "OpenAI").getOrThrow()
+        keys.saveApiKey(id, "test-key")
+        providers.setEnabled(id, false)
+        val vm = ProviderDetailViewModel(SavedStateHandle(mapOf("configId" to id)), providers, keys,
+            SaveProviderApiKeyUseCase(keys, providers), ConnectProviderUseCase(chat, providers, prefs))
+        backgroundScope.launch { vm.uiState.collect {} }
+        advanceUntilIdle()
+        vm.runDiagnostics()
+        advanceUntilIdle()
+        assertEquals(ConnectionStatus.Success, vm.uiState.value.connectionStatus)
+        assertFalse(providers.currentConfig(id)!!.enabled)
+        assertEquals("other", prefs.userPreferences.value.defaultProviderConfigId)
+        assertTrue(vm.uiState.value.lastCheckedAt != null)
+    }
+
     @Test
     fun replacingAKeyDoesNotReuseItsOldModelWhenVerificationFails() = runTest {
         val providers = FakeProviderConfigRepository()
@@ -49,6 +71,8 @@ class ProviderDetailViewModelTest {
         assertTrue(viewModel.uiState.value.connectionStatus is ConnectionStatus.Failure)
         assertFalse(viewModel.uiState.value.isSavingKey)
         assertTrue(viewModel.uiState.value.saveKeyErrorMessage != null)
+        assertTrue(viewModel.uiState.value.lastCheckedAt != null)
+        assertTrue(viewModel.uiState.value.checkDurationMs!! >= 0)
     }
 
     @Test
@@ -80,6 +104,7 @@ class ProviderDetailViewModelTest {
         assertEquals(ConnectionStatus.Success, viewModel.uiState.value.connectionStatus)
         assertFalse(viewModel.uiState.value.isSavingKey)
         assertEquals(model.modelId, chat.lastRequest?.second)
+        assertTrue(viewModel.uiState.value.lastCheckedAt != null)
         assertEquals(model.modelId, providers.currentConfig(id)?.verifiedModelId)
         assertEquals(model.modelId, prefs.userPreferences.value.defaultModelId)
     }

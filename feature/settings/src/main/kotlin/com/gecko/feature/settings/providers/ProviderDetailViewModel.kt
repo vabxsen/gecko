@@ -36,6 +36,8 @@ data class ProviderDetailUiState(
     /** The model verified for this connection, independent of the currently active key. */
     val selectedModelId: String? = null,
     val isLoading: Boolean = true,
+    val lastCheckedAt: java.time.Instant? = null,
+    val checkDurationMs: Long? = null,
 ) {
     val providerId: ProviderId? get() = config?.providerId
     val label: String get() = config?.label.orEmpty()
@@ -64,6 +66,17 @@ class ProviderDetailViewModel @Inject constructor(
         ?: savedStateHandle.toRoute<ProviderDetailRoute>().configId
 
     private val isSavingKey = MutableStateFlow(false)
+    private data class CheckResult(val time: java.time.Instant, val durationMs: Long)
+    private val lastCheck = MutableStateFlow<CheckResult?>(null)
+
+    private suspend fun checkConnection(activate: Boolean = true): Result<ModelInfo> {
+        val start = System.nanoTime()
+        try {
+            return connectProviderUseCase(id, activate)
+        } finally {
+            lastCheck.value = CheckResult(java.time.Instant.now(), (System.nanoTime() - start) / 1_000_000)
+        }
+    }
 
     // The stored key is fetched once up front (and refreshed in-place on save/clear) rather than
     // exposed as a reactive Flow — SecureKeyStore is a one-shot suspend read, not observable.
@@ -85,7 +98,8 @@ class ProviderDetailViewModel @Inject constructor(
         // Grouped because combine only has typed overloads up to five flows, and the untyped
         // vararg version loses every type in the lambda.
         combine(apiKeyValue, isApiKeyLoaded, saveKeyErrorMessage, ::KeyEditingState),
-    ) { config, models, savingKey, keyState ->
+        lastCheck,
+    ) { config, models, savingKey, keyState, check ->
         ProviderDetailUiState(
             id = id,
             config = config,
@@ -96,6 +110,8 @@ class ProviderDetailViewModel @Inject constructor(
             saveKeyErrorMessage = keyState.error,
             selectedModelId = config?.verifiedModelId,
             isLoading = false,
+            lastCheckedAt = check?.time,
+            checkDurationMs = check?.durationMs,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProviderDetailUiState(id = id))
 
@@ -119,7 +135,7 @@ class ProviderDetailViewModel @Inject constructor(
             try {
                 saveProviderApiKeyUseCase(id, trimmed)
                 apiKeyValue.value = trimmed
-                connectProviderUseCase(id).getOrThrow()
+                checkConnection().getOrThrow()
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
@@ -139,15 +155,24 @@ class ProviderDetailViewModel @Inject constructor(
             providerConfigRepository.setConnectionStatus(id, ConnectionStatus.Untested)
             apiKeyValue.value = null
             saveKeyErrorMessage.value = null
+            lastCheck.value = null
         }
     }
 
     fun testConnection() {
+        recheckConnection(activate = true)
+    }
+
+    fun runDiagnostics() {
+        recheckConnection(activate = false)
+    }
+
+    private fun recheckConnection(activate: Boolean) {
         if (isSavingKey.value || uiState.value.connectionStatus == ConnectionStatus.Testing) return
         isSavingKey.value = true
         saveKeyErrorMessage.value = null
         viewModelScope.launch {
-            try { connectProviderUseCase(id) }
+            try { checkConnection(activate) }
             finally { isSavingKey.value = false }
         }
     }
@@ -160,7 +185,7 @@ class ProviderDetailViewModel @Inject constructor(
             try {
                 providerConfigRepository.setBaseUrlOverride(id, url?.trim()?.trimEnd('/')?.ifBlank { null })
                 providerConfigRepository.saveModels(id, emptyList())
-                connectProviderUseCase(id)
+                checkConnection()
             } finally { isSavingKey.value = false }
         }
     }

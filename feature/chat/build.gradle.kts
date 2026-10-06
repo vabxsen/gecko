@@ -72,6 +72,7 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.hilt.navigation.compose)
     implementation(libs.kotlinx.serialization.json)
+    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
 
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
@@ -85,5 +86,6 @@ dependencies {
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.compose.ui.test.junit4)
+    androidTestImplementation(project(":core:testing"))
     debugImplementation(libs.compose.ui.test.manifest)
 }

@@ -13,6 +13,28 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 @RunWith(AndroidJUnit4::class)
 class GeckoDatabaseMigrationTest {
 
+    @Test
+    fun versionSixKeepsExistingMessagesAndStoresDrafts() {
+        helper.createDatabase(DATABASE_NAME, 5).apply {
+            execSQL("INSERT INTO conversations VALUES ('chat', 'Keep me', 1, 2, 0, NULL, NULL)")
+            execSQL("INSERT INTO messages (id, conversationId, role, content, createdAt, status) VALUES ('message', 'chat', 'USER', 'Existing text', 1, 'COMPLETE')")
+            close()
+        }
+        helper.runMigrationsAndValidate(DATABASE_NAME, 6, true, *GeckoDatabaseMigrations.ALL).use { database ->
+            database.query("SELECT content, documentName FROM messages WHERE id = 'message'").use {
+                assertTrue(it.moveToFirst())
+                assertEquals("Existing text", it.getString(0))
+                assertTrue(it.isNull(1))
+            }
+            database.execSQL("INSERT INTO drafts VALUES ('chat', 'Unsent question', 'image', 'notes.pdf', '[Page 1] Notes', 1)")
+            database.query("SELECT text, documentText FROM drafts WHERE conversationId = 'chat'").use {
+                assertTrue(it.moveToFirst())
+                assertEquals("Unsent question", it.getString(0))
+                assertEquals("[Page 1] Notes", it.getString(1))
+            }
+        }
+    }
+
     @get:Rule
     val helper = MigrationTestHelper(
         InstrumentationRegistry.getInstrumentation(),

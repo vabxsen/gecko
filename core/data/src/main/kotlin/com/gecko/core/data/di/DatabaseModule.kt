@@ -1,5 +1,6 @@
 package com.gecko.core.data.di
 
+import com.gecko.core.database.dao.DraftDao
 import android.content.Context
 import androidx.room.Room
 import com.gecko.core.database.GeckoDatabase
@@ -25,6 +26,9 @@ object DatabaseModule {
         Room.databaseBuilder(context, GeckoDatabase::class.java, GeckoDatabase.DATABASE_NAME)
             .addMigrations(*GeckoDatabaseMigrations.ALL)
             .build()
+
+    @Provides
+    fun provideDraftDao(database: GeckoDatabase): DraftDao = database.draftDao()
 
     @Provides
     fun provideConversationDao(database: GeckoDatabase): ConversationDao = database.conversationDao()

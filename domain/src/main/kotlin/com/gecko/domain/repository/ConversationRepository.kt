@@ -1,5 +1,6 @@
 package com.gecko.domain.repository
 
+import com.gecko.core.model.chat.ChatDraft
 import com.gecko.core.model.chat.ChatMessage
 import com.gecko.core.model.conversation.Conversation
 import com.gecko.core.model.provider.ProviderId
@@ -7,6 +8,8 @@ import java.time.Instant
 import kotlinx.coroutines.flow.Flow
 
 interface ConversationRepository {
+    suspend fun getDraft(conversationId: String?): ChatDraft
+    suspend fun saveDraft(conversationId: String?, draft: ChatDraft)
     fun observeConversations(): Flow<List<Conversation>>
     fun searchConversations(query: String): Flow<List<Conversation>>
     suspend fun getConversation(id: String): Conversation?

@@ -1,5 +1,9 @@
 package com.gecko.feature.chat
 
+import com.gecko.core.designsystem.component.GeckoTextButton
+import androidx.compose.foundation.layout.Column
+import androidx.compose.material3.Text
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.activity.compose.BackHandler
@@ -209,6 +213,7 @@ private fun ChatContent(
     // 16dp of bottom margin is for comfortable thumb reach above the gesture/nav bar when the
     // keyboard is closed. That full margin isn't needed once the keyboard is up, but the composer
     // still needs a little breathing room above the keyboard rather than sitting flush on it.
+    val draftState by viewModel.drafts.state.collectAsStateWithLifecycle()
     var suggestedPrompt by remember { mutableStateOf<String?>(null) }
     val imeVisible = WindowInsets.isImeVisible
     val composerBottomPadding = if (imeVisible) 8.dp else 16.dp
@@ -250,21 +255,38 @@ private fun ChatContent(
         bottomBar = {
             if (uiState.enabledProviders.isNotEmpty()) {
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    key(draftRevision, uiState.currentConversationId) {
-                        MessageComposer(
-                            isGenerating = uiState.isGenerating,
-                            sendOnEnter = uiState.sendOnEnter,
-                            onSend = viewModel::sendMessage,
-                            onStop = viewModel::stopGeneration,
-                            suggestedPrompt = suggestedPrompt,
-                            onSuggestionConsumed = { suggestedPrompt = null },
-                            modifier = Modifier
-                                .navigationBarsPadding()
-                                .imePadding()
-                                .widthIn(max = 800.dp)
-                                .padding(horizontal = 16.dp)
-                                .padding(top = 8.dp, bottom = composerBottomPadding),
-                        )
+                    if (draftState.loaded && draftState.conversationId == uiState.currentConversationId) {
+                        key(draftRevision, uiState.currentConversationId) {
+                            MessageComposer(
+                                isGenerating = uiState.isGenerating,
+                                sendOnEnter = uiState.sendOnEnter,
+                                onSend = { text, image -> viewModel.sendMessage(text, image) },
+                                onSendDocument = { text, image, document -> viewModel.sendMessage(text, image, document) },
+                                initialDraft = draftState.draft,
+                                onDraftChange = { viewModel.drafts.save(uiState.currentConversationId, it) },
+                                draftError = draftState.error,
+                                onStop = viewModel::stopGeneration,
+                                suggestedPrompt = suggestedPrompt,
+                                onSuggestionConsumed = { suggestedPrompt = null },
+                                modifier = Modifier
+                                    .navigationBarsPadding()
+                                    .imePadding()
+                                    .widthIn(max = 800.dp)
+                                    .padding(horizontal = 16.dp)
+                                    .padding(top = 8.dp, bottom = composerBottomPadding),
+                            )
+                        }
+                    } else {
+                        if (draftState.error != null) {
+                            Column(Modifier.padding(16.dp)) {
+                                Text(draftState.error.orEmpty())
+                                GeckoTextButton(onClick = {
+                                    viewModel.drafts.load(uiState.currentConversationId)
+                                }) { Text("Restore draft again") }
+                            }
+                        } else {
+                            LinearProgressIndicator(Modifier.fillMaxWidth().padding(16.dp))
+                        }
                     }
                 }
             }

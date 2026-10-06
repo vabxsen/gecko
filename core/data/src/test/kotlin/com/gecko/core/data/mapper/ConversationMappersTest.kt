@@ -57,6 +57,7 @@ class ConversationMappersTest {
             conversationId = "c1",
             role = MessageRole.USER,
             content = "Hi",
+            document = com.gecko.core.model.chat.DocumentAttachment("notes.pdf", "[Page 1]\nHello", 1),
             createdAt = Instant.EPOCH,
             status = MessageStatus.COMPLETE,
         )
@@ -67,5 +68,6 @@ class ConversationMappersTest {
         assertNull(entity.completionTokens)
         assertNull(entity.totalTokens)
         assertNull(entity.toDomain().tokenUsage)
+        assertEquals(message.document, entity.toDomain().document)
     }
 }

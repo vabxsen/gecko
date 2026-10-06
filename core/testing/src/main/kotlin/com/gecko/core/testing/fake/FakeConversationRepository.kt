@@ -1,5 +1,6 @@
 package com.gecko.core.testing.fake
 
+import com.gecko.core.model.chat.ChatDraft
 import com.gecko.core.common.util.newId
 import com.gecko.core.model.chat.ChatMessage
 import com.gecko.core.model.conversation.Conversation
@@ -14,6 +15,10 @@ import kotlinx.coroutines.flow.update
 class FakeConversationRepository : ConversationRepository {
     private val conversations = MutableStateFlow<List<Conversation>>(emptyList())
     private val messagesByConversation = mutableMapOf<String, MutableStateFlow<List<ChatMessage>>>()
+
+    private val drafts = mutableMapOf<String?, ChatDraft>()
+    override suspend fun getDraft(conversationId: String?) = drafts[conversationId] ?: ChatDraft()
+    override suspend fun saveDraft(conversationId: String?, draft: ChatDraft) { drafts[conversationId] = draft }
 
     override fun observeConversations(): Flow<List<Conversation>> = conversations
 
@@ -51,11 +56,13 @@ class FakeConversationRepository : ConversationRepository {
     }
 
     override suspend fun deleteConversation(id: String) {
+        drafts.remove(id)
         conversations.update { list -> list.filterNot { it.id == id } }
         messagesByConversation.remove(id)
     }
 
     override suspend fun deleteAllConversations() {
+        drafts.clear()
         conversations.value = emptyList()
         messagesByConversation.clear()
     }

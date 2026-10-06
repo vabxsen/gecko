@@ -1,5 +1,6 @@
 package com.gecko.core.data.mapper
 
+import com.gecko.core.model.chat.DocumentAttachment
 import com.gecko.core.database.entity.ConversationEntity
 import com.gecko.core.database.entity.MessageEntity
 import com.gecko.core.model.chat.ChatMessage
@@ -50,6 +51,9 @@ internal fun MessageEntity.toDomain(): ChatMessage = ChatMessage(
     errorKind = ErrorKind.fromWireName(errorKind),
     attachmentImageBase64 = attachmentImageBase64,
     generatedImageBase64 = generatedImageBase64,
+    document = documentName?.let { name -> documentText?.let { text ->
+        DocumentAttachment(name, text, documentPageCount)
+    } },
 )
 
 internal fun ChatMessage.toEntity(): MessageEntity = MessageEntity(
@@ -68,4 +72,7 @@ internal fun ChatMessage.toEntity(): MessageEntity = MessageEntity(
     errorKind = errorKind?.wireName,
     attachmentImageBase64 = attachmentImageBase64,
     generatedImageBase64 = generatedImageBase64,
+    documentName = document?.name,
+    documentText = document?.text,
+    documentPageCount = document?.pageCount,
 )

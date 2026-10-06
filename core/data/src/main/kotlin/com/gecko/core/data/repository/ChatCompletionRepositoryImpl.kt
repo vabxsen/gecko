@@ -1,5 +1,6 @@
 package com.gecko.core.data.repository
 
+import com.gecko.core.model.chat.MessageRole
 import com.gecko.core.model.chat.ChatEvent
 import com.gecko.core.model.chat.ChatMessage
 import com.gecko.core.model.error.ErrorKind
@@ -10,6 +11,7 @@ import com.gecko.core.model.provider.ProviderConfig
 import com.gecko.core.provider.api.ProviderFactory
 import com.gecko.domain.model.curatedForSelection
 import com.gecko.domain.model.trimToContextBudget
+import com.gecko.domain.model.withDocumentContexts
 import com.gecko.domain.repository.ChatCompletionRepository
 import com.gecko.domain.repository.ProviderConfigRepository
 import com.gecko.domain.repository.SecureKeyRepository
@@ -37,7 +39,15 @@ class ChatCompletionRepositoryImpl @Inject constructor(
             return flowOf(ChatEvent.Error(config.missingKeyError(configId)))
         }
         val model = providerConfigRepository.observeModels(configId).first().find { it.modelId == modelId }
-        val budgetedHistory = history.trimToContextBudget(model?.contextWindowTokens)
+        val expandedHistory = history.withDocumentContexts()
+        // Never silently cut a document in half to fit the current model.
+        val lastUser = expandedHistory.lastOrNull { it.role == MessageRole.USER }
+        val contextLimit = model?.contextWindowTokens
+        if (contextLimit != null && contextLimit > 0 && lastUser != null &&
+            lastUser.content.length / 4 + 2048 > contextLimit) {
+            return flowOf(ChatEvent.Error(GeckoError(ErrorKind.ContextTooLong, configId = configId)))
+        }
+        val budgetedHistory = expandedHistory.trimToContextBudget(contextLimit)
         return providerFactory.create(config.providerId, apiKey, config.baseUrlOverride).sendMessage(budgetedHistory, modelId, stream && model?.supportsStreaming != false)
     }
 

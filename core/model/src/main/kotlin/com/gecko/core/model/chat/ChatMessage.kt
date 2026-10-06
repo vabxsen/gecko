@@ -25,4 +25,5 @@ data class ChatMessage(
     val attachmentImageBase64: String? = null,
     /** Base64-encoded image an image-output model (e.g. Gemini's "-image" models) generated. */
     val generatedImageBase64: String? = null,
+    val document: DocumentAttachment? = null,
 )

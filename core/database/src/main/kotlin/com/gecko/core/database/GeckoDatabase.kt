@@ -1,5 +1,7 @@
 package com.gecko.core.database
 
+import com.gecko.core.database.entity.DraftEntity
+import com.gecko.core.database.dao.DraftDao
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import com.gecko.core.database.dao.ConversationDao
@@ -13,15 +15,17 @@ import com.gecko.core.database.entity.ProviderConfigEntity
 
 @Database(
     entities = [
+        DraftEntity::class,
         ConversationEntity::class,
         MessageEntity::class,
         ProviderConfigEntity::class,
         ModelCatalogEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 abstract class GeckoDatabase : RoomDatabase() {
+    abstract fun draftDao(): DraftDao
     abstract fun conversationDao(): ConversationDao
     abstract fun messageDao(): MessageDao
     abstract fun providerConfigDao(): ProviderConfigDao

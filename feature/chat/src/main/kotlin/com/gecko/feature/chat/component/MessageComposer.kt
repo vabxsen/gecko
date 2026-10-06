@@ -1,5 +1,13 @@
 package com.gecko.feature.chat.component
 
+import kotlinx.coroutines.CancellationException
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.rememberUpdatedState
+import com.gecko.core.model.chat.DocumentAttachment
+import com.gecko.core.model.chat.ChatDraft
 import com.gecko.core.designsystem.component.GeckoIconButton
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
@@ -94,12 +102,16 @@ fun MessageComposer(
     modifier: Modifier = Modifier,
     suggestedPrompt: String? = null,
     onSuggestionConsumed: () -> Unit = {},
+    initialDraft: ChatDraft = ChatDraft(),
+    onDraftChange: (ChatDraft) -> Unit = {},
+    onSendDocument: ((String, String?, DocumentAttachment) -> Boolean)? = null,
+    draftError: String? = null,
 ) {
     val context = LocalContext.current
     // Leave room for the keyboard and action row, including on short screens with large text.
     val maxInputHeight = (LocalConfiguration.current.screenHeightDp * 0.2f).coerceIn(56f, 144f).dp
     val scope = rememberCoroutineScope()
-    var text by rememberSaveable { mutableStateOf("") }
+    var text by rememberSaveable { mutableStateOf(initialDraft.text) }
     val inputFocus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     val focusInteraction = remember { MutableInteractionSource() }
@@ -118,9 +130,39 @@ fun MessageComposer(
             onSuggestionConsumed()
         }
     }
-    var attachmentBase64 by remember { mutableStateOf<String?>(null) }
+    var attachmentBase64 by remember { mutableStateOf(initialDraft.imageBase64) }
+    var document by remember { mutableStateOf(initialDraft.document) }
+    var attachmentMenu by remember { mutableStateOf(false) }
+    var attachmentError by remember { mutableStateOf<String?>(null) }
+    // Read live state at disposal too: a successful first send may change the chat key before
+    // this composer gets another recomposition. A cached snapshot would resurrect its old draft.
+    val latestDraft = { ChatDraft(text, attachmentBase64, document) }
+    val saveDraft by rememberUpdatedState(onDraftChange)
+    LaunchedEffect(Unit) {
+        snapshotFlow { latestDraft() }.collect { saveDraft(it) }
+    }
+    DisposableEffect(Unit) { onDispose { saveDraft(latestDraft()) } }
     var isEncodingAttachment by remember { mutableStateOf(false) }
     var isListening by remember { mutableStateOf(false) }
+
+    val pickDocument = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            isEncodingAttachment = true
+            attachmentError = null
+            scope.launch {
+                try {
+                    document = readDocument(context, uri)
+                    attachmentBase64 = null
+                } catch (cancelled: CancellationException) { throw cancelled }
+                catch (error: Exception) {
+                    attachmentError = if (error is com.tom_roush.pdfbox.pdmodel.encryption.InvalidPasswordException)
+                        "This PDF is password protected. Choose an unlocked copy."
+                    else if (error is java.nio.charset.CharacterCodingException) "Choose a UTF-8 text document."
+                    else error.message ?: "Couldn't read this document. Try another file."
+                } finally { isEncodingAttachment = false }
+            }
+        }
+    }
 
     val pickMedia = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) {
@@ -128,7 +170,11 @@ fun MessageComposer(
             scope.launch {
                 try {
                     attachmentBase64 = encodeImageAttachment(context, uri)
-                } finally {
+                    document = null
+                    attachmentError = null
+                } catch (cancelled: CancellationException) { throw cancelled }
+                catch (_: Exception) { attachmentError = "Couldn't read that image. Try another file." }
+                finally {
                     isEncodingAttachment = false
                 }
             }
@@ -199,11 +245,16 @@ fun MessageComposer(
 
     fun send() {
         if (isGenerating || isEncodingAttachment) return
-        if (text.isBlank() && attachmentBase64 == null) return
-        if (onSend(text, attachmentBase64)) {
+        if (text.isBlank() && attachmentBase64 == null && document == null) return
+        val source = document
+        val accepted = if (source != null) onSendDocument?.invoke(text, attachmentBase64, source) == true
+            else onSend(text, attachmentBase64)
+        if (accepted) {
             haptics.performHapticFeedback(HapticFeedbackType.Confirm)
             text = ""
             attachmentBase64 = null
+            document = null
+            onDraftChange(ChatDraft())
         }
     }
 
@@ -215,6 +266,23 @@ fun MessageComposer(
         modifier = modifier.fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)) {
+            (attachmentError ?: draftError)?.let { Text(it, color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(10.dp)) }
+            document?.let { source ->
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 12.dp)) {
+                    Column(Modifier.weight(1f)) {
+                        Text(source.name, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.labelLarge)
+                        Text(source.pageCount?.let { "$it pages · Text ready" } ?: "Text ready",
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                    GeckoIconButton(onClick = { document = null }) {
+                        Icon(Icons.Outlined.Close, "Remove document")
+                    }
+                }
+                Text("Document text is sent with your message.", style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 12.dp))
+            }
             AnimatedVisibility(
                 visible = attachmentBase64 != null,
                 enter = fadeIn(tween(GeckoMotion.DURATION_STANDARD)) + expandVertically(tween(GeckoMotion.DURATION_STANDARD, easing = GeckoMotion.EasingEmphasized)),
@@ -249,10 +317,20 @@ fun MessageComposer(
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.surfaceContainer, CircleShape)
                         .clickable(enabled = !isEncodingAttachment) {
-                            pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                            attachmentMenu = true
                         },
                     contentAlignment = Alignment.Center,
                 ) {
+                    DropdownMenu(expanded = attachmentMenu, onDismissRequest = { attachmentMenu = false }) {
+                        DropdownMenuItem(text = { Text("Photo") }, onClick = {
+                            attachmentMenu = false
+                            pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                        })
+                        if (onSendDocument != null) DropdownMenuItem(text = { Text("Document · PDF, text, Markdown") }, onClick = {
+                            attachmentMenu = false
+                            pickDocument.launch(arrayOf("application/pdf", "text/plain", "text/markdown", "text/x-markdown"))
+                        })
+                    }
                     if (isEncodingAttachment) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(18.dp),
@@ -288,7 +366,7 @@ fun MessageComposer(
                             },
                         )
                     }
-                    val canSend = !isEncodingAttachment && (text.isNotBlank() || attachmentBase64 != null)
+                    val canSend = !isEncodingAttachment && (text.isNotBlank() || attachmentBase64 != null || document != null)
                     ComposerActionButton(
                         icon = Icons.Filled.ArrowUpward,
                         contentDescription = "Send message",

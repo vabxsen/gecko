@@ -20,6 +20,38 @@ class MessageComposerTest {
     @get:Rule
     val compose = createComposeRule()
 
+    @Test fun restoresDocumentAndKeepsItWhenSendIsRejected() {
+        val source = com.gecko.core.model.chat.DocumentAttachment("notes.pdf", "[Page 1] Source", 1)
+        var saved = com.gecko.core.model.chat.ChatDraft()
+        var sent: com.gecko.core.model.chat.DocumentAttachment? = null
+        compose.setContent {
+            MaterialTheme {
+                MessageComposer(false, true, onSend = { _, _ -> false }, onStop = {},
+                    initialDraft = com.gecko.core.model.chat.ChatDraft("Question", document = source),
+                    onDraftChange = { saved = it },
+                    onSendDocument = { _, _, doc -> sent = doc; false })
+            }
+        }
+        compose.onNode(hasSetTextAction()).assertTextContains("Question")
+        compose.onNodeWithText("notes.pdf").assertExists()
+        compose.onNodeWithContentDescription("Send message").performClick()
+        compose.runOnIdle { assertEquals(source, sent); assertEquals(source, saved.document) }
+        compose.onNodeWithContentDescription("Remove document").performClick()
+        compose.runOnIdle { assertEquals(null, saved.document) }
+    }
+
+    @Test fun attachmentMenuOffersPhotoAndDocumentWithoutSending() {
+        compose.setContent {
+            MaterialTheme {
+                MessageComposer(false, true, onSend = { _, _ -> false }, onStop = {},
+                    onSendDocument = { _, _, _ -> false })
+            }
+        }
+        compose.onNodeWithContentDescription("Add attachment").performClick()
+        compose.onNodeWithText("Photo").assertExists()
+        compose.onNodeWithText("Document · PDF, text, Markdown").assertExists()
+    }
+
     @Test
     fun starterFillsTheDraftWithoutSending() {
         val suggestion = mutableStateOf<String?>(null)

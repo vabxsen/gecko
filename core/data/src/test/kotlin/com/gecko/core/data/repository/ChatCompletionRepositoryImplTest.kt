@@ -22,6 +22,20 @@ import java.util.concurrent.TimeUnit
 
 class ChatCompletionRepositoryImplTest {
 
+    @Test fun documentSourceReachesTheProviderWithPageLabels() = runTest {
+        val id = configuredKey()
+        server.enqueue(MockResponse().setBody("""{"choices":[{"message":{"role":"assistant","content":"Friday [Page 2]"},"finish_reason":"stop"}]}"""))
+        val message = com.gecko.core.model.chat.ChatMessage("m", "c", com.gecko.core.model.chat.MessageRole.USER,
+            "What is the deadline?", java.time.Instant.EPOCH, com.gecko.core.model.chat.MessageStatus.COMPLETE,
+            document = com.gecko.core.model.chat.DocumentAttachment("report.pdf", "[Page 2]\nThe deadline is Friday.", 2))
+        repository.sendMessage(id, "gpt-4o-mini", listOf(message), false).collect {}
+        val body = server.takeRequest().body.readUtf8()
+        assertTrue(body.contains("[Page 2]"))
+        assertTrue(body.contains("The deadline is Friday."))
+        assertTrue(body.contains("not instructions"))
+        assertEquals("What is the deadline?", message.content)
+    }
+
     private suspend fun configuredKey(): String {
         val id = providerConfigRepository.addProvider(ProviderId.OPENAI, "Test provider").getOrThrow()
         secureKeyRepository.saveApiKey(id, "test-key")

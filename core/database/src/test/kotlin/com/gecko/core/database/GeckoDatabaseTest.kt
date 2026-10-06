@@ -18,6 +18,31 @@ import org.junit.Assert.assertTrue
 @RunWith(AndroidJUnit4::class)
 class GeckoDatabaseTest {
 
+    @Test fun draftSurvivesClosingAndReopeningDatabase() = runTest {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val name = "draft-reopen-test.db"
+        context.deleteDatabase(name)
+        val draft = com.gecko.core.database.entity.DraftEntity("", "Unsent", "image", "notes.pdf", "[Page 2] Notes", 2)
+        fun open() = Room.databaseBuilder(context, GeckoDatabase::class.java, name).allowMainThreadQueries().build()
+        val first = open()
+        try { first.draftDao().save(draft) } finally { first.close() }
+        val second = open()
+        try { assertEquals(draft, second.draftDao().get("")) }
+        finally { second.close(); context.deleteDatabase(name) }
+    }
+
+    @Test fun draftsKeepTextAndAttachmentsSeparateBetweenChats() = runTest {
+        val draft = com.gecko.core.database.entity.DraftEntity("chat", "Question", "image", "notes.pdf", "[Page 1] Notes", 1)
+        database.draftDao().save(draft)
+        database.draftDao().save(draft.copy(conversationId = "", text = "New chat"))
+        assertEquals(draft, database.draftDao().get("chat"))
+        database.draftDao().delete("chat")
+        assertNull(database.draftDao().get("chat"))
+        assertEquals("New chat", database.draftDao().get("")?.text)
+        database.draftDao().deleteAll()
+        assertNull(database.draftDao().get(""))
+    }
+
     private lateinit var database: GeckoDatabase
 
     @Before

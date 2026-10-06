@@ -13,6 +13,7 @@ import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
@@ -32,6 +33,8 @@ import com.gecko.feature.settings.component.*
 fun ProviderDetailScreen(onBack: () -> Unit, modifier: Modifier = Modifier,
     viewModel: ProviderDetailViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val keyFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     var apiKey by remember { mutableStateOf("") }
     var initialized by remember { mutableStateOf(false) }
     var visible by remember { mutableStateOf(false) }
@@ -65,9 +68,13 @@ fun ProviderDetailScreen(onBack: () -> Unit, modifier: Modifier = Modifier,
                         style = MaterialTheme.typography.bodyLarge)
                     Text("Gecko checks a reply before choosing a model for this key.",
                         style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    ConnectionDiagnostics(state, onCheck = viewModel::runDiagnostics, onEditKey = {
+                        keyFocus.requestFocus()
+                        keyboard?.show()
+                    })
                     SettingsSectionHeader("API key")
                     SettingsPanel {
-                        OutlinedTextField(apiKey, { apiKey = it }, Modifier.fillMaxWidth(), label = { Text("API key") },
+                        OutlinedTextField(apiKey, { apiKey = it }, Modifier.fillMaxWidth().focusRequester(keyFocus), label = { Text("API key") },
                             singleLine = true, enabled = state.isApiKeyLoaded && !state.isSavingKey,
                             shape = MaterialTheme.shapes.medium,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),

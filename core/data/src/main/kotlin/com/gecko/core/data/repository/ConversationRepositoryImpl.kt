@@ -1,5 +1,9 @@
 package com.gecko.core.data.repository
 
+import com.gecko.core.database.entity.DraftEntity
+import com.gecko.core.database.dao.DraftDao
+import com.gecko.core.model.chat.DocumentAttachment
+import com.gecko.core.model.chat.ChatDraft
 import com.gecko.core.common.dispatchers.DispatcherProvider
 import com.gecko.core.common.util.newId
 import com.gecko.core.data.mapper.toDomain
@@ -20,7 +24,22 @@ class ConversationRepositoryImpl @Inject constructor(
     private val conversationDao: ConversationDao,
     private val messageDao: MessageDao,
     private val dispatchers: DispatcherProvider,
+    private val draftDao: DraftDao,
 ) : ConversationRepository {
+
+    override suspend fun getDraft(conversationId: String?): ChatDraft {
+        val row = draftDao.get(conversationId.orEmpty()) ?: return ChatDraft()
+        return ChatDraft(row.text, row.imageBase64,
+            row.documentName?.let { name -> row.documentText?.let { text ->
+                DocumentAttachment(name, text, row.documentPageCount)
+            } })
+    }
+
+    override suspend fun saveDraft(conversationId: String?, draft: ChatDraft) {
+        if (draft.isEmpty) draftDao.delete(conversationId.orEmpty())
+        else draftDao.save(DraftEntity(conversationId.orEmpty(), draft.text,
+            draft.imageBase64, draft.document?.name, draft.document?.text, draft.document?.pageCount))
+    }
 
     override fun observeConversations(): Flow<List<Conversation>> =
         conversationDao.observeAll().map { entities -> entities.map { it.toDomain() } }
@@ -61,10 +80,12 @@ class ConversationRepositoryImpl @Inject constructor(
     }
 
     override suspend fun deleteConversation(id: String) = withContext(dispatchers.io) {
+        draftDao.delete(id)
         conversationDao.deleteById(id)
     }
 
     override suspend fun deleteAllConversations() = withContext(dispatchers.io) {
+        draftDao.deleteAll()
         conversationDao.deleteAll()
     }
 

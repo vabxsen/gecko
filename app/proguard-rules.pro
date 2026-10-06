@@ -29,3 +29,7 @@
 -dontwarn org.conscrypt.**
 -dontwarn org.bouncycastle.**
 -dontwarn org.openjsse.**
+
+# PDFBox's optional JPEG-2000 decoder is not bundled. Gecko extracts document text;
+# it does not decode embedded JPX images. PDFBox handles the absent decoder itself.
+-dontwarn com.gemalto.jp2.JP2Decoder

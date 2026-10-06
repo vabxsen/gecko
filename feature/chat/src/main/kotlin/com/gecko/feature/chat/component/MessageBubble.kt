@@ -31,6 +31,8 @@ import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.StopCircle
+import androidx.compose.material.icons.outlined.VolumeUp
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -103,6 +105,7 @@ private fun UserMessage(
         ) {
             Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                 message.attachmentImageBase64?.let { AttachedImage(it) }
+                message.document?.let { DocumentPreview(it) }
                 Text(
                     text = message.content,
                     style = MaterialTheme.typography.bodyLarge,
@@ -189,6 +192,13 @@ private fun AssistantMessage(
         if (!stillTyping) {
             MessageActionsRow(alignEnd = false) {
                 CopyActionIcon(text = message.content)
+                val reader = LocalReadAloud.current
+                if (reader != null && message.content.isNotBlank()) {
+                    val speaking = reader.speakingId == message.id
+                    ActionIcon(icon = if (speaking) Icons.Outlined.StopCircle else Icons.Outlined.VolumeUp,
+                        contentDescription = if (speaking) "Stop reading" else "Read aloud",
+                        onClick = { reader.toggle(message.id, message.content) })
+                }
                 if (isLastAssistantMessage) {
                     ActionIcon(icon = Icons.Outlined.Refresh, contentDescription = "Regenerate response", onClick = onRegenerate)
                 }

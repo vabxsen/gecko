@@ -1,7 +1,6 @@
 package com.gecko.domain.usecase
 
 import javax.inject.Inject
-
 import com.gecko.core.model.chat.MessageRole
 import com.gecko.domain.repository.ConversationRepository
 import java.time.format.DateTimeFormatter
@@ -34,6 +33,7 @@ class ExportConversationsUseCase @Inject constructor(
                     appendLine("$speaker:")
                     appendLine()
                     appendLine(message.content)
+                    message.document?.let { appendLine("\nDocument: ${it.name}\n\n${it.text}") }
                     appendLine()
                 }
                 appendLine("---")
