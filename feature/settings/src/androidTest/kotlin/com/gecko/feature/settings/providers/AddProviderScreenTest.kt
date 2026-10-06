@@ -4,6 +4,15 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -28,7 +37,7 @@ class AddProviderScreenTest {
                 .getSystemService(ClipboardManager::class.java)
                 .setPrimaryClip(ClipData.newPlainText("test key", "synthetic-test-key"))
         }
-        compose.onNodeWithText("Paste from clipboard").performClick()
+        compose.onNodeWithContentDescription("Paste API key").performClick()
         compose.runOnIdle {
             org.junit.Assert.assertEquals("synthetic-test-key", state.value.apiKey)
             org.junit.Assert.assertEquals(0, connects)
@@ -71,5 +80,27 @@ class AddProviderScreenTest {
         compose.onNodeWithText("DeepSeek").performClick()
         compose.onNodeWithText("Connect & start chatting").assertIsEnabled()
         compose.onNodeWithText("Custom base URL").assertDoesNotExist()
+    }
+
+    @Test fun connectStaysVisibleWithLargeTextAndKeyboardSizedAvailableSpace() {
+        var connects = 0
+        compose.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, 1.5f)) {
+                MaterialTheme {
+                    Box(Modifier.fillMaxWidth().height(340.dp).testTag("available-space")) {
+                        AddProviderContent(AddProviderUiState(apiKey = "synthetic-key", selectedProviderId = ProviderId.OPENROUTER,
+                            providerLabel = "OpenRouter"), {}, {}, {}, {}, {}, { connects++ })
+                    }
+                }
+            }
+        }
+        val button = compose.onNodeWithText("Connect & start chatting")
+        button.assertIsDisplayed().assertIsEnabled()
+        val available = compose.onNodeWithTag("available-space").getUnclippedBoundsInRoot()
+        val bounds = button.getUnclippedBoundsInRoot()
+        org.junit.Assert.assertTrue("Connect must fit above the keyboard", bounds.top >= available.top && bounds.bottom <= available.bottom)
+        button.performClick()
+        compose.runOnIdle { org.junit.Assert.assertEquals(1, connects) }
     }
 }

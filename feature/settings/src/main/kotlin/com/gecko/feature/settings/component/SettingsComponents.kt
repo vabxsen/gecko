@@ -49,7 +49,7 @@ fun SettingsTopBar(title: String, onBack: () -> Unit, modifier: Modifier = Modif
 /** Keeps every settings page readable on a phone, a large font, or a tablet. */
 @Composable
 fun SettingsPageFrame(padding: PaddingValues, content: @Composable BoxScope.() -> Unit) {
-    Box(Modifier.fillMaxSize().padding(padding).geckoReveal(40), contentAlignment = Alignment.TopCenter, content = content)
+    Box(Modifier.fillMaxSize().padding(padding).geckoReveal(), contentAlignment = Alignment.TopCenter, content = content)
 }
 
 @Composable
@@ -65,7 +65,7 @@ fun SettingsPanel(modifier: Modifier = Modifier, content: @Composable ColumnScop
     Surface(modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f))) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp), content = content)
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
     }
 }
 
@@ -73,7 +73,7 @@ fun SettingsPanel(modifier: Modifier = Modifier, content: @Composable ColumnScop
 fun SettingsSectionHeader(title: String, modifier: Modifier = Modifier) {
     Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
         letterSpacing = 0.6.sp, fontWeight = FontWeight.Medium,
-        modifier = modifier.padding(start = 4.dp, top = 16.dp, bottom = 2.dp)
+        modifier = modifier.padding(start = 4.dp, top = 8.dp, bottom = 2.dp)
             .semantics { heading() })
 }
 
@@ -108,7 +108,7 @@ fun SettingsRow(
         color = MaterialTheme.colorScheme.surface,
         border = if (grouped) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))) {
         Row(Modifier.then(if (onClick != null) Modifier.clickable(interactionSource = press, indication = ripple(), role = Role.Button, onClick = onClick) else Modifier)
-            .heightIn(min = 76.dp).padding(16.dp), verticalAlignment = Alignment.CenterVertically,
+            .heightIn(min = 68.dp).padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             if (leading != null) {
                 Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainer) {
@@ -132,7 +132,12 @@ fun SettingsSwitchRow(title: String, checked: Boolean, onCheckedChange: (Boolean
     SettingsRow(title = title, subtitle = subtitle,
         modifier = modifier.geckoPress(press).toggleable(value = checked, interactionSource = press,
             indication = ripple(), role = Role.Switch, onValueChange = onCheckedChange),
-        trailing = { Switch(checked = checked, onCheckedChange = null) })
+        trailing = { Switch(checked = checked, onCheckedChange = null,
+            colors = SwitchDefaults.colors(
+                uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                uncheckedTrackColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                uncheckedBorderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            )) })
 }
 
 val SettingsContentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 32.dp)

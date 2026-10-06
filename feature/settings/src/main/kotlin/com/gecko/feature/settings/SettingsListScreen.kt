@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.outlined.Refresh
-import com.gecko.core.designsystem.component.GeckoPageIntro
 import com.gecko.feature.settings.component.SettingsPageFrame
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
@@ -87,7 +86,7 @@ fun SettingsListScreen(
         // and "Model preferences" â€” two menu items for one decision, where only the second one
         // actually changed anything.
         val ai = listOf(
-            SettingsDestination("AI Providers", "API keys and connections", Icons.Outlined.SmartToy, onNavigateAiProviders),
+            SettingsDestination("AI connections", "Keys and connection status", Icons.Outlined.SmartToy, onNavigateAiProviders),
         )
         val other = listOf(
             SettingsDestination("Data & Privacy", "Export and clear local data", Icons.Outlined.PrivacyTip, onNavigateDataPrivacy),
@@ -97,7 +96,6 @@ fun SettingsListScreen(
         SettingsPageFrame(innerPadding) {
             LazyColumn(modifier = Modifier.widthIn(max = 720.dp).fillMaxWidth(),
                 contentPadding = SettingsContentPadding, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                item { GeckoPageIntro("Make it yours", "A little fine-tuning for the way you think.") }
                 item { SettingsSectionHeader("Your AI") }
                 item { SettingsGroup { ai.forEach { DestinationRow(it) } } }
                 item { SettingsSectionHeader("Your experience") }

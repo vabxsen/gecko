@@ -12,7 +12,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import com.gecko.core.designsystem.component.GeckoPageIntro
 import com.gecko.feature.settings.component.SettingsPageFrame
-import com.gecko.feature.settings.component.SettingsPanel
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -61,19 +60,14 @@ fun AiProvidersScreen(
 
     Scaffold(
         modifier = modifier,
-        topBar = { SettingsTopBar(title = "AI Providers", onBack = onBack) },
+        topBar = { SettingsTopBar(title = "AI connections", onBack = onBack) },
 
     ) { innerPadding ->
         SettingsPageFrame(innerPadding) {
             LazyColumn(Modifier.widthIn(max = 720.dp).fillMaxWidth(), contentPadding = SettingsContentPadding,
                 verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                item { GeckoPageIntro("Your AI, connected", "One place for your keys and the models you use.") }
                 if (rows.isEmpty()) {
-                    item { SettingsPanel {
-                        Text("Start with one key", style = MaterialTheme.typography.titleLarge)
-                        Text("Paste a key from your AI provider. Gecko will find a working model for you.",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    } }
+                    item { GeckoPageIntro("Connect your first AI", "Bring your key. Gecko handles the model setup.") }
                 }
                 items(rows, key = { it.config.id }) { row ->
                     ProviderRow(row, { onOpenProvider(row.config.id) },
@@ -82,7 +76,7 @@ fun AiProvidersScreen(
                 if (canAddMore) {
                     item { GeckoButton(onClick = onAddProvider, modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Filled.Add, null, Modifier.padding(end = 8.dp))
-                        Text("Add API key", Modifier.padding(vertical = 8.dp))
+                        Text(if (rows.isEmpty()) "Connect AI" else "Add connection", Modifier.padding(vertical = 8.dp))
                     } }
                 }
                 item { Text("Keys are encrypted and stored on this device.",

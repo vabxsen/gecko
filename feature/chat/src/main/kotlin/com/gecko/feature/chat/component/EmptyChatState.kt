@@ -13,15 +13,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.gecko.core.designsystem.component.GeckoWelcomeMark
 import com.gecko.core.designsystem.theme.geckoPress
 import com.gecko.core.designsystem.theme.geckoReveal
@@ -34,7 +33,7 @@ fun EmptyChatState(
     onPromptSelected: (String) -> Unit = {},
     hasSavedConnection: Boolean = false,
 ) {
-    BoxWithConstraints(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    BoxWithConstraints(modifier.fillMaxSize(), contentAlignment = BiasAlignment(0f, -0.3f)) {
         val compact = maxHeight < 420.dp
         Column(
             Modifier.widthIn(max = 520.dp).fillMaxWidth()
@@ -46,15 +45,10 @@ fun EmptyChatState(
                 Spacer(Modifier.height(8.dp))
             }
             Text(
-                "A little space\nfor big ideas.",
-                style = MaterialTheme.typography.displayMedium.copy(
-                    fontSize = if (compact) 26.sp else 32.sp,
-                    lineHeight = if (compact) 32.sp else 38.sp,
-                    fontWeight = FontWeight.Medium,
-                    letterSpacing = (-0.8).sp,
-                ),
+                if (needsConnection) "A little space\nfor big ideas." else "What's on your mind?",
+                style = if (compact) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.displayMedium,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.geckoReveal(60).semantics { heading() },
+                modifier = Modifier.geckoReveal(30).semantics { heading() },
             )
             Spacer(Modifier.height(if (compact) 8.dp else 12.dp))
             Text(
@@ -63,13 +57,13 @@ fun EmptyChatState(
                 style = if (compact) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.geckoReveal(110),
+                modifier = Modifier.geckoReveal(60),
             )
-            Spacer(Modifier.height(if (compact) 16.dp else 32.dp))
+            Spacer(Modifier.height(if (compact) 16.dp else 24.dp))
             if (needsConnection) {
                 val press = remember { MutableInteractionSource() }
                 Button(onClick = onConnect, interactionSource = press,
-                    modifier = Modifier.geckoReveal(160).geckoPress(press).fillMaxWidth().heightIn(min = 52.dp)) {
+                    modifier = Modifier.geckoReveal(90).geckoPress(press).fillMaxWidth().heightIn(min = 52.dp)) {
                     Text(if (hasSavedConnection) "Connect automatically" else "Connect your AI", Modifier.padding(vertical = 8.dp))
                     Icon(Icons.AutoMirrored.Outlined.ArrowForward, null, Modifier.padding(start = 12.dp).size(18.dp))
                 }
@@ -88,7 +82,7 @@ private fun PromptSuggestions(onPromptSelected: (String) -> Unit) {
     val explain = { onPromptSelected("Help me understand a topic. Start by asking what I want to learn.") }
     val brainstorm = { onPromptSelected("Help me brainstorm. Ask me about the idea I want to explore.") }
     val fontScale = LocalDensity.current.fontScale
-    BoxWithConstraints(Modifier.fillMaxWidth().geckoReveal(160)) {
+    BoxWithConstraints(Modifier.fillMaxWidth().geckoReveal(90)) {
         // Preserve readable labels and touch targets when accessibility text is enlarged.
         if (maxWidth >= 330.dp && fontScale <= 1.15f) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {

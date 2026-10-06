@@ -7,7 +7,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import android.content.ClipboardManager
 import com.gecko.core.designsystem.component.GeckoBrandTile
-import com.gecko.core.designsystem.component.GeckoPageIntro
 import com.gecko.feature.settings.component.SettingsPanel
 import com.gecko.feature.settings.component.AdvancedSettingsButton
 import com.gecko.core.designsystem.theme.geckoReveal
@@ -15,7 +14,14 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import com.gecko.core.designsystem.component.GeckoExpandableContent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
@@ -27,6 +33,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.ContentPaste
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
@@ -71,6 +78,7 @@ fun AddProviderScreen(
         viewModel::updateLabel, viewModel::updateBaseUrlOverride, { viewModel.save(onSaved) }, modifier)
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun AddProviderContent(
     state: AddProviderUiState,
@@ -87,104 +95,134 @@ internal fun AddProviderContent(
     var keyVisible by remember { mutableStateOf(false) }
     var chooseProvider by remember { mutableStateOf(false) }
     var advanced by rememberSaveable { mutableStateOf(false) }
-    Scaffold(modifier = modifier, topBar = { SettingsTopBar("Connect your AI", onBack) }) { padding ->
-        Box(Modifier.padding(padding).imePadding().fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-            Column(
-                Modifier.widthIn(max = 560.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp).geckoReveal(40),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                GeckoBrandTile(size = 64.dp)
-                GeckoPageIntro("One key. You're in.", "Paste your API key. Gecko will find a working model and get you straight into chat.")
-                SettingsPanel {
-                    OutlinedTextField(
-                        value = state.apiKey, onValueChange = onKeyChange,
-                        label = { Text("API key") }, placeholder = { Text("Paste your key here") },
-                        modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !state.isSaving,
-                        shape = MaterialTheme.shapes.medium,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                        trailingIcon = {
-                            GeckoIconButton(onClick = { keyVisible = !keyVisible }) {
-                                Icon(if (keyVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
-                                    if (keyVisible) "Hide key" else "Show key")
-                            }
-                        },
-                    )
-                    GeckoTextButton(onClick = {
-                        val clip = context.getSystemService(ClipboardManager::class.java).primaryClip
-                        if (clip != null && clip.itemCount > 0) {
-                            clip.getItemAt(0).text?.toString()?.let(onKeyChange)
+    BoxWithConstraints(modifier.fillMaxSize()) {
+        val compact = WindowInsets.isImeVisible || maxHeight < 500.dp
+        val connect = { keyboard?.hide(); onConnect() }
+        Scaffold(
+            modifier = Modifier.imePadding(),
+            topBar = { SettingsTopBar("Connect your AI", onBack) },
+            bottomBar = {
+                if (compact) {
+                    Surface(color = MaterialTheme.colorScheme.background) {
+                        Box(Modifier.fillMaxWidth().navigationBarsPadding(), contentAlignment = Alignment.Center) {
+                            ConnectAction(state, connect,
+                                Modifier.widthIn(max = 560.dp).fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp))
                         }
-                    }, enabled = !state.isSaving) {
-                        Text("Paste from clipboard")
                     }
-                    if (state.apiKey.isNotBlank() || state.selectedProviderId != null) {
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                state.selectedProviderId?.let {
-                                    ProviderLogo(providerId = it, baseUrlOverride = state.baseUrlOverride.ifBlank { null }, size = 28.dp)
-                                }
-                                Text(state.providerLabel.ifBlank { "Which provider is this key from?" },
-                                    modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-                                Box {
-                                    GeckoTextButton(onClick = { chooseProvider = true }, enabled = !state.isSaving) {
-                                        Text(if (state.selectedProviderId == null) "Choose" else "Change")
-                                        Icon(Icons.Outlined.ExpandMore, null, Modifier.size(18.dp))
+                }
+            },
+        ) { padding ->
+            Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding), contentAlignment = Alignment.TopCenter) {
+                Column(
+                    Modifier.widthIn(max = 560.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp).geckoReveal(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    if (!compact) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            GeckoBrandTile(size = 44.dp)
+                            Text("One key. You're in.", style = MaterialTheme.typography.headlineMedium)
+                        }
+                        Text("Paste your key. We'll connect a working model for you.",
+                            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    SettingsPanel {
+                        OutlinedTextField(
+                            value = state.apiKey, onValueChange = onKeyChange,
+                            label = { Text("API key") }, placeholder = { Text("Paste your key here") },
+                            modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !state.isSaving,
+                            shape = MaterialTheme.shapes.medium,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                            visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                            trailingIcon = {
+                                Row {
+                                    GeckoIconButton(onClick = {
+                                        val clip = context.getSystemService(ClipboardManager::class.java).primaryClip
+                                        if (clip != null && clip.itemCount > 0) clip.getItemAt(0).text?.toString()?.let(onKeyChange)
+                                    }, enabled = !state.isSaving) {
+                                        Icon(Icons.Outlined.ContentPaste, "Paste API key")
                                     }
-                                    DropdownMenu(expanded = chooseProvider, onDismissRequest = { chooseProvider = false }) {
-                                        ADD_PROVIDER_OPTIONS.forEach { option ->
-                                            DropdownMenuItem(text = { Text(option.label) }, onClick = {
-                                                onSelectProvider(option)
-                                                chooseProvider = false
-                                            })
+                                    GeckoIconButton(onClick = { keyVisible = !keyVisible }, enabled = !state.isSaving) {
+                                        Icon(if (keyVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                                            if (keyVisible) "Hide key" else "Show key")
+                                    }
+                                }
+                            },
+                        )
+                        if (state.apiKey.isNotBlank() || state.selectedProviderId != null) {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    state.selectedProviderId?.let {
+                                        ProviderLogo(providerId = it, baseUrlOverride = state.baseUrlOverride.ifBlank { null }, size = 28.dp)
+                                    }
+                                    Text(state.providerLabel.ifBlank { "Which provider is this key from?" },
+                                        modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                                    Box {
+                                        GeckoTextButton(onClick = { chooseProvider = true }, enabled = !state.isSaving) {
+                                            Text(if (state.selectedProviderId == null) "Choose" else "Change")
+                                            Icon(Icons.Outlined.ExpandMore, null, Modifier.size(18.dp))
+                                        }
+                                        DropdownMenu(expanded = chooseProvider, onDismissRequest = { chooseProvider = false }) {
+                                            ADD_PROVIDER_OPTIONS.forEach { option ->
+                                                DropdownMenuItem(text = { Text(option.label) }, onClick = {
+                                                    onSelectProvider(option)
+                                                    chooseProvider = false
+                                                })
+                                            }
                                         }
                                     }
                                 }
-                            }
-                            if (state.selectedProviderId == null) {
-                                Text("Some keys share the same format. Choose the service that issued yours.",
-                                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                    }
-                    state.error?.let { error ->
-                        val copy = error.copyForUser()
-                        Surface(color = MaterialTheme.colorScheme.errorContainer, shape = MaterialTheme.shapes.medium) {
-                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text(copy.title, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onErrorContainer)
-                                Text(if (error.kind == ErrorKind.ModelUnavailable)
-                                    "We couldn't find an available chat model for this key. Check model access with your provider, then try again."
-                                    else copy.explanation, style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onErrorContainer)
+                                if (state.selectedProviderId == null) {
+                                    Text("Some keys share the same format. Choose the service that issued yours.",
+                                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
                             }
                         }
+                        state.error?.let { error ->
+                            val copy = error.copyForUser()
+                            Surface(color = MaterialTheme.colorScheme.errorContainer, shape = MaterialTheme.shapes.medium) {
+                                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text(copy.title, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onErrorContainer)
+                                    Text(if (error.kind == ErrorKind.ModelUnavailable)
+                                        "We couldn't find an available chat model for this key. Check model access with your provider, then try again."
+                                        else copy.explanation, style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onErrorContainer)
+                                }
+                            }
+                        }
+                        if (!compact) ConnectAction(state, connect)
                     }
-                    GeckoButton(onClick = { keyboard?.hide(); onConnect() }, enabled = state.canSave, modifier = Modifier.fillMaxWidth()) {
-                        if (state.isSaving) CircularProgressIndicator(Modifier.padding(end = 10.dp).size(18.dp), strokeWidth = 2.dp)
-                        Text(if (state.isSaving) "Connecting…" else "Connect & start chatting", Modifier.padding(vertical = 8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Outlined.Lock, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Your key is encrypted and stored on this device.", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    if (state.isSaving) Text("Finding a model that works with your key…",
-                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Outlined.Lock, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("Your key is encrypted and stored on this device.", style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                AdvancedSettingsButton(advanced, { advanced = !advanced }, enabled = !state.isSaving)
-                GeckoExpandableContent(advanced) {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        OutlinedTextField(state.label, onLabelChange, Modifier.fillMaxWidth(),
-                            label = { Text("Name (optional)") }, singleLine = true, enabled = !state.isSaving)
-                        if (state.selectedProviderId == ProviderId.OPENAI) {
-                            OutlinedTextField(state.baseUrlOverride, onUrlChange, Modifier.fillMaxWidth(),
-                                label = { Text("Custom base URL") }, singleLine = true, enabled = !state.isSaving,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
+                    AdvancedSettingsButton(advanced, { advanced = !advanced }, enabled = !state.isSaving)
+                    GeckoExpandableContent(advanced) {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            OutlinedTextField(state.label, onLabelChange, Modifier.fillMaxWidth(),
+                                label = { Text("Name (optional)") }, singleLine = true, enabled = !state.isSaving)
+                            if (state.selectedProviderId == ProviderId.OPENAI) {
+                                OutlinedTextField(state.baseUrlOverride, onUrlChange, Modifier.fillMaxWidth(),
+                                    label = { Text("Custom base URL") }, singleLine = true, enabled = !state.isSaving,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
+                            }
                         }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ConnectAction(state: AddProviderUiState, onConnect: () -> Unit, modifier: Modifier = Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        GeckoButton(onClick = onConnect, enabled = state.canSave, modifier = Modifier.fillMaxWidth()) {
+            if (state.isSaving) CircularProgressIndicator(Modifier.padding(end = 10.dp).size(18.dp), strokeWidth = 2.dp)
+            Text(if (state.isSaving) "Connecting…" else "Connect & start chatting", Modifier.padding(vertical = 8.dp))
+        }
+        if (state.isSaving) Text("Finding a model that works with your key…",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

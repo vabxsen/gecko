@@ -55,11 +55,11 @@ fun Modifier.geckoReveal(delayMillis: Int = 0): Modifier {
     var appeared by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { appeared = true }
     val progress = animateFloatAsState(if (appeared || !motion) 1f else 0f,
-        tween(440, delayMillis = delayMillis, easing = GeckoMotion.EasingEmphasized), label = "entrance")
+        tween(220, delayMillis = delayMillis, easing = GeckoMotion.EasingEmphasized), label = "entrance")
     return graphicsLayer {
         val fraction = if (motion) progress.value else 1f
         alpha = fraction
-        translationY = 16.dp.toPx() * (1f - fraction)
+        translationY = 8.dp.toPx() * (1f - fraction)
         scaleX = 0.98f + fraction * 0.02f
         scaleY = scaleX
     }

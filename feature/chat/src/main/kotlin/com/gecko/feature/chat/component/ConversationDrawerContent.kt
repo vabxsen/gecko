@@ -69,6 +69,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.gecko.core.designsystem.theme.GeckoMotion
 import androidx.compose.ui.unit.sp
@@ -103,7 +104,8 @@ fun ConversationDrawerContent(
                 AnimatedContent(
                     targetState = searchActive,
                     transitionSpec = {
-                        fadeIn(tween(GeckoMotion.DURATION_QUICK)) togetherWith fadeOut(tween(GeckoMotion.DURATION_QUICK))
+                        fadeIn(tween(if (motion) GeckoMotion.DURATION_QUICK else 0)) togetherWith
+                            fadeOut(tween(if (motion) GeckoMotion.DURATION_QUICK else 0))
                     },
                     label = "drawerHeader",
                 ) { active ->
@@ -148,13 +150,13 @@ fun ConversationDrawerContent(
                                 Box(
                                     modifier = Modifier
                                         .size(36.dp)
-                                        .background(MaterialTheme.colorScheme.primary, CircleShape),
+                                        .background(MaterialTheme.colorScheme.surfaceContainer, CircleShape),
                                     contentAlignment = Alignment.Center,
                                 ) {
                                     Icon(
                                         imageVector = Icons.Outlined.Search,
                                         contentDescription = "Search conversations",
-                                        tint = MaterialTheme.colorScheme.onPrimary,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.size(18.dp),
                                     )
                                 }
@@ -207,6 +209,13 @@ fun ConversationDrawerContent(
                         text = if (searchQuery.isBlank()) "No conversations yet" else "No matches",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = if (searchQuery.isBlank()) "Your chats will appear here after your first message." else "Try a different search.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
                     )
                 }
             } else {
